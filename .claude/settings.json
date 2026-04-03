@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude plugin:*)",
+      "Bash(claude mcp:*)",
+      "Bash(npm create:*)",
+      "Bash(cp -r _scaffold/. .)",
+      "Bash(rm -rf _scaffold)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
+    ]
+  }
+}
