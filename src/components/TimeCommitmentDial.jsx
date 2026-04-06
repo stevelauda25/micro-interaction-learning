@@ -1,49 +1,43 @@
-import { useState, useRef, useCallback } from 'react'
-import { motion as Motion, useMotionValue, animate } from 'framer-motion'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { motion as Motion, AnimatePresence, useMotionValue, useSpring, animate } from 'framer-motion'
 import clsx from 'clsx'
 import { BackButton } from './ui/BackButton'
 
-
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DIAL_SIZE = 292          // px — matches Figma node 1622:3645
-const STROKE_WIDTH = 6         // progress arc thickness
-const KNOB_SIZE = 20           // draggable knob diameter
+const DIAL_SIZE = 292
+const STROKE_WIDTH = 6
+const KNOB_SIZE = 20
 
-// FIX 1 — Radius calculation: inset by strokeWidth + half knob + knob stroke
-// so the knob never extends beyond the SVG viewBox bounds.
-// Total knob extent = knob radius (10) + knob stroke (3) = 13px
-const PADDING = KNOB_SIZE / 2 + 3  // 13px — room for knob + its stroke
-const TRACK_RADIUS = (DIAL_SIZE / 2) - PADDING  // fits entirely inside viewBox
-const INNER_RADIUS = TRACK_RADIUS - 28          // where tick marks sit
+const PADDING = KNOB_SIZE / 2 + 3
+const TRACK_RADIUS = (DIAL_SIZE / 2) - PADDING
+const INNER_RADIUS = TRACK_RADIUS - 28
 const CENTER = DIAL_SIZE / 2
 
 const MAX_VALUE = 60
-const TICK_COUNT = 60          // one per minute
+const TICK_COUNT = 60
 
-// ─── Angle math helpers ───────────────────────────────────────────────────────
+// Circumference for stroke-dashoffset arc animation
+const CIRCUMFERENCE = 2 * Math.PI * TRACK_RADIUS
+
+// ─── Smoothing constant ──────────────────────────────────────────────────────
+// Lerp factor: lower = smoother/laggier, higher = snappier.
+// 0.15 gives a 1–2 frame delay at 60fps — feels like a weighted physical knob.
+const LERP_FACTOR = 0.15
+
+// ─── Angle math helpers ──────────────────────────────────────────────────────
 
 /**
  * Convert a pointer position to an angle in degrees (0–360).
  * 0° = 12 o'clock, increasing clockwise.
  *
- * Math.atan2 gives the angle from the positive X-axis, counter-clockwise.
- * We need: offset so 0° = top, direction = clockwise.
- *
- * Steps:
- *   1. Get dx/dy from center of circle
- *   2. atan2(dx, -dy) → angle from top, clockwise (swap x/y and negate y)
- *   3. Normalize to [0, 360)
+ * atan2(dx, -dy) naturally gives 0 at top, positive clockwise.
+ * We normalize negative results to [0, 360).
  */
 function pointerToAngle(pointerX, pointerY, centerX, centerY) {
   const dx = pointerX - centerX
   const dy = pointerY - centerY
-
-  // atan2(dx, -dy) naturally gives 0 at top, positive clockwise
   let angleDeg = Math.atan2(dx, -dy) * (180 / Math.PI)
-
-  // Normalize negative angles to [0, 360)
   if (angleDeg < 0) angleDeg += 360
-
   return angleDeg
 }
 
@@ -58,9 +52,8 @@ function valueToAngle(value) {
 }
 
 /**
- * Get knob (x, y) on the circle for a given angle (degrees, 0° = top).
- * Converts to standard math angle first:
- *   standard = 90° − dialAngle  (since 0° top → 90° in standard)
+ * Get (x, y) on the circle for a given dial angle.
+ * Converts dial angle (0° = top, CW) to standard math angle for cos/sin.
  */
 function angleToPoint(angleDeg, radius) {
   const rad = ((angleDeg - 90) * Math.PI) / 180
@@ -70,89 +63,125 @@ function angleToPoint(angleDeg, radius) {
   }
 }
 
-// ─── SVG arc path helper ──────────────────────────────────────────────────────
-function describeArc(radius, startAngle, endAngle) {
-  const start = angleToPoint(startAngle, radius)
-  const end = angleToPoint(endAngle, radius)
-  const largeArc = endAngle - startAngle > 180 ? 1 : 0
-
-  return [
-    'M', start.x, start.y,
-    'A', radius, radius, 0, largeArc, 1, end.x, end.y,
-  ].join(' ')
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 export function TimeCommitmentDial() {
   // ── State ──────────────────────────────────────────────────────────────────
-  const [value, setValue] = useState(25)       // 0–60 minutes
-  const [angle, setAngle] = useState(valueToAngle(25))
+  const [value, setValue] = useState(25)
   const [isDragging, setIsDragging] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(false) // controls entry animation
+  const [displayValue, setDisplayValue] = useState(null) // for animated number swap
 
-  // For center number scale animation
-  const centerScale = useMotionValue(1)
+  // ── Motion values — updated per-frame without triggering re-renders ────────
+  // smoothAngle drives the knob position and arc; it lerps toward targetAngle.
+  const targetAngle = useRef(valueToAngle(25))
+  const smoothAngle = useMotionValue(0) // starts at 0 for entry animation
+
+  // Spring-based knob scale for tactile feel on state changes
+  // stiffness 300 + damping 15 gives a bouncy-but-controlled overshoot
+  const knobScale = useSpring(1, { stiffness: 300, damping: 15 })
 
   // ── Refs ───────────────────────────────────────────────────────────────────
-  const circleRef = useRef(null)    // SVG container — used for bounding box
-  const prevAngleRef = useRef(valueToAngle(25))  // FIX 2 — tracks last accepted angle for anti-wrap
-  const valueRef = useRef(25)       // FIX 3 — avoids stale closure on `value`
+  const circleRef = useRef(null)
+  const prevAngleRef = useRef(valueToAngle(25))
+  const valueRef = useRef(25)
+  const rafRef = useRef(null)
+  const isDraggingRef = useRef(false)
+
+  // ── Animation frame loop ───────────────────────────────────────────────────
+  // Runs continuously during drag to lerp smoothAngle toward targetAngle.
+  // This is what creates the "weighted knob" feel — the visual position
+  // always chases the actual pointer position with exponential decay.
+  const startAnimationLoop = useCallback(() => {
+    const loop = () => {
+      const current = smoothAngle.get()
+      const target = targetAngle.current
+
+      // Lerp: move 15% of the remaining distance each frame
+      const next = current + (target - current) * LERP_FACTOR
+
+      // Stop looping when we're close enough (< 0.1°)
+      if (Math.abs(target - next) > 0.1) {
+        smoothAngle.set(next)
+        rafRef.current = requestAnimationFrame(loop)
+      } else {
+        smoothAngle.set(target)
+        rafRef.current = null
+      }
+    }
+
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(loop)
+    }
+  }, [smoothAngle])
+
+  // Cleanup RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
+
+  // ── Entry animation ────────────────────────────────────────────────────────
+  // Sequence: arc draws from 0 → value, knob follows, then number fades in.
+  // Total duration ~900ms for a premium first impression.
+  useEffect(() => {
+    const targetVal = valueToAngle(25)
+
+    // Animate smoothAngle from 0 to initial value over 800ms
+    // easeOut curve makes the arc decelerate naturally
+    animate(smoothAngle, targetVal, {
+      duration: 0.8,
+      ease: [0.16, 1, 0.3, 1], // custom ease-out curve — fast start, gentle stop
+      onComplete: () => {
+        // Number appears last — 200ms after arc finishes
+        setTimeout(() => {
+          setDisplayValue(25)
+          setIsLoaded(true)
+        }, 100)
+      },
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Drag logic ─────────────────────────────────────────────────────────────
-
-  /**
-   * Core drag handler: takes a pointer event, calculates angle from the
-   * circle center using boundingClientRect, maps to value.
-   *
-   * FIX 2 — Anti-wrap logic:
-   *   We track the previous accepted angle in prevAngleRef. If the delta
-   *   between the new angle and the previous exceeds 180°, the user has
-   *   crossed the 0°/360° boundary in a single frame — which is physically
-   *   impossible with smooth dragging. We reject that update so the knob
-   *   can't teleport from max → 0 or vice versa.
-   *
-   * FIX 3 — Stale closure fix:
-   *   `value` was in the dependency array, causing handlePointerInteraction
-   *   to be recreated every time value changed, which in turn recreated
-   *   handlePointerDown/Move. Using valueRef avoids that entirely.
-   */
   const handlePointerInteraction = useCallback((e) => {
     if (!circleRef.current) return
 
-    // Get circle center from bounding box (not hardcoded)
     const rect = circleRef.current.getBoundingClientRect()
     const centerX = rect.left + rect.width / 2
     const centerY = rect.top + rect.height / 2
 
     const newAngle = pointerToAngle(e.clientX, e.clientY, centerX, centerY)
 
-    // ── Anti-wrap: reject jumps larger than 180° ──────────────────────────
-    // A smooth drag can never produce a > 180° delta in a single pointer event.
-    // This prevents the slider from jumping across the 0°/360° boundary.
+    // Anti-wrap: reject > 180° jumps (physically impossible in smooth drag).
+    // This prevents teleporting across the 0°/360° seam.
     const delta = Math.abs(newAngle - prevAngleRef.current)
-    if (delta > 180) return  // ignore this update — user crossed the seam
+    if (delta > 180) return
 
     prevAngleRef.current = newAngle
-    setAngle(newAngle)
+    targetAngle.current = newAngle
+
+    // Start the lerp loop — smoothAngle will chase targetAngle
+    startAnimationLoop()
 
     const newValue = angleToValue(newAngle)
 
-    // Only trigger scale animation when value actually changes
     if (newValue !== valueRef.current) {
       valueRef.current = newValue
       setValue(newValue)
-      // Subtle scale pop on the center number
-      animate(centerScale, [1.05, 1], { duration: 0.2, ease: 'easeOut' })
+      setDisplayValue(newValue)
     }
-  }, [centerScale])  // no more `value` dependency — uses valueRef instead
+  }, [startAnimationLoop])
 
   const handlePointerDown = useCallback((e) => {
     e.preventDefault()
-    // FIX 3 — Capture pointer so moves outside the element still register
     e.currentTarget.setPointerCapture(e.pointerId)
     setIsDragging(true)
+    isDraggingRef.current = true
 
-    // On initial click, seed prevAngleRef to the clicked angle so the
-    // anti-wrap check doesn't reject the very first interaction.
+    // Scale up knob on grab — 1.15x with spring overshoot
+    knobScale.set(1.15)
+
     if (circleRef.current) {
       const rect = circleRef.current.getBoundingClientRect()
       const clickAngle = pointerToAngle(
@@ -164,48 +193,109 @@ export function TimeCommitmentDial() {
     }
 
     handlePointerInteraction(e)
-  }, [handlePointerInteraction])
+  }, [handlePointerInteraction, knobScale])
 
   const handlePointerMove = useCallback((e) => {
-    if (!isDragging) return
+    if (!isDraggingRef.current) return
     e.preventDefault()
     handlePointerInteraction(e)
-  }, [isDragging, handlePointerInteraction])
+  }, [handlePointerInteraction])
 
   const handlePointerUp = useCallback((e) => {
     e.currentTarget.releasePointerCapture(e.pointerId)
     setIsDragging(false)
-  }, [])
+    isDraggingRef.current = false
 
-  // ── Derived values ─────────────────────────────────────────────────────────
-  const knobPos = angleToPoint(angle, TRACK_RADIUS)
-  const progressPath = angle > 0.5
-    ? describeArc(TRACK_RADIUS, 0, Math.min(angle, 359.5))
-    : ''
+    // Release animation: knob squishes down then bounces back
+    // 1.15 → 0.95 → 1.0 with spring physics
+    // cubic-bezier(0.34, 1.56, 0.64, 1) is approximated by the spring config
+    knobScale.set(0.95)
+    setTimeout(() => knobScale.set(1), 120)
 
-  // ── Tick marks ─────────────────────────────────────────────────────────────
-  const ticks = []
-  for (let i = 0; i < TICK_COUNT; i++) {
-    const tickAngle = (i / TICK_COUNT) * 360
-    const isMajor = i % 15 === 0  // 0, 15, 30, 45
-    const isMinor5 = i % 5 === 0 && !isMajor
+    // Micro overshoot on release: push angle slightly past target, then settle.
+    // This simulates physical momentum — the dial "coasts" a tiny bit.
+    const current = smoothAngle.get()
+    const overshootAmount = 3 // degrees — subtle enough to feel natural
+    const direction = current - (prevAngleRef.current - 1) > 0 ? 1 : -1
+    const overshootTarget = targetAngle.current + (overshootAmount * direction)
 
-    const outerR = INNER_RADIUS + (isMajor ? 8 : isMinor5 ? 4 : 2)
-    const innerR = INNER_RADIUS - (isMajor ? 2 : 0)
+    // Clamp overshoot to valid range
+    const clamped = Math.max(0, Math.min(359.5, overshootTarget))
 
-    const outer = angleToPoint(tickAngle, outerR)
-    const inner = angleToPoint(tickAngle, innerR)
+    animate(smoothAngle, [clamped, targetAngle.current], {
+      duration: 0.4,
+      ease: [0.34, 1.56, 0.64, 1], // overshoot easing — passes target then returns
+    })
+  }, [knobScale, smoothAngle])
 
-    ticks.push(
-      <line
-        key={i}
-        x1={outer.x} y1={outer.y}
-        x2={inner.x} y2={inner.y}
-        stroke={isMajor ? '#1a1a1a' : 'rgba(0,0,0,0.15)'}
-        strokeWidth={isMajor ? 2.5 : 1}
-        strokeLinecap="round"
-      />
-    )
+  // ── Derived SVG values (recomputed from smoothAngle via motion) ────────────
+  // We subscribe to smoothAngle changes to derive knob position and arc.
+  const [renderAngle, setRenderAngle] = useState(0)
+
+  useEffect(() => {
+    const unsubscribe = smoothAngle.on('change', (latest) => {
+      setRenderAngle(latest)
+    })
+    return unsubscribe
+  }, [smoothAngle])
+
+  const knobPos = angleToPoint(renderAngle, TRACK_RADIUS)
+
+  // stroke-dashoffset: full circumference = no arc, 0 = full circle.
+  // We subtract the portion that should be visible.
+  const dashOffset = CIRCUMFERENCE - (renderAngle / 360) * CIRCUMFERENCE
+
+  // ── Tick marks with progress-aware opacity ─────────────────────────────────
+  const ticks = useMemo(() => {
+    const result = []
+    for (let i = 0; i < TICK_COUNT; i++) {
+      const tickAngle = (i / TICK_COUNT) * 360
+      const isMajor = i % 15 === 0
+      const isMinor5 = i % 5 === 0 && !isMajor
+
+      const outerR = INNER_RADIUS + (isMajor ? 8 : isMinor5 ? 4 : 2)
+      const innerR = INNER_RADIUS - (isMajor ? 2 : 0)
+
+      const outer = angleToPoint(tickAngle, outerR)
+      const inner = angleToPoint(tickAngle, innerR)
+
+      // Ticks that the progress has passed get slightly brighter
+      const isPassed = tickAngle <= renderAngle
+      const baseOpacity = isMajor ? 1 : 0.15
+      const activeOpacity = isMajor ? 1 : 0.35
+
+      result.push(
+        <line
+          key={i}
+          x1={outer.x} y1={outer.y}
+          x2={inner.x} y2={inner.y}
+          stroke={isMajor ? '#1a1a1a' : 'rgba(0,0,0,1)'}
+          strokeWidth={isMajor ? 2.5 : 1}
+          strokeLinecap="round"
+          opacity={isPassed ? activeOpacity : baseOpacity}
+          style={{ transition: 'opacity 0.2s ease' }}
+        />
+      )
+    }
+    return result
+  }, [renderAngle])
+
+  // ── Number animation variants ──────────────────────────────────────────────
+  // Old value slides up and fades out, new value slides up from below and fades in.
+  // This prevents the jarring instant-swap that breaks the premium feel.
+  const numberVariants = {
+    enter: {
+      opacity: 0,
+      y: 6,
+    },
+    center: {
+      opacity: 1,
+      y: 0,
+    },
+    exit: {
+      opacity: 0,
+      y: -6,
+    },
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -224,7 +314,6 @@ export function TimeCommitmentDial() {
           className="flex items-end justify-between h-[72px] pb-3 pt-5 px-5"
           data-node-id="1622:3636"
         >
-          {/* Back navigation — top-left of header, navigates to Short Escapes listing */}
           <BackButton to="/" showLabel={false} />
           <div className="size-8 shrink-0" data-node-id="1622:3640" />
         </div>
@@ -254,7 +343,6 @@ export function TimeCommitmentDial() {
           data-node-id="1622:3644"
         >
           {/* ── Circular dial ─────────────────────────────────────────────── */}
-          {/* FIX 1 — overflow-visible so the knob shadow/scale is never clipped */}
           <div
             className="relative select-none overflow-visible"
             style={{ width: DIAL_SIZE, height: DIAL_SIZE }}
@@ -271,6 +359,22 @@ export function TimeCommitmentDial() {
               onPointerUp={handlePointerUp}
               style={{ cursor: isDragging ? 'grabbing' : 'pointer' }}
             >
+              {/* ── Glow filter for arc leading edge ───────────────────────── */}
+              <defs>
+                <filter id="arc-glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                  <feColorMatrix
+                    in="blur"
+                    type="matrix"
+                    values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0"
+                  />
+                  <feMerge>
+                    <feMergeNode />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
               {/* ── Background track (light gray ring) ────────────────────── */}
               <circle
                 cx={CENTER}
@@ -282,18 +386,37 @@ export function TimeCommitmentDial() {
               />
 
               {/* ── Active progress arc (blue) ────────────────────────────── */}
-              {progressPath && (
-                <path
-                  d={progressPath}
-                  fill="none"
-                  stroke="#1a9df3"
-                  strokeWidth={STROKE_WIDTH}
-                  strokeLinecap="round"
-                  className="transition-none"
+              {/* Uses stroke-dashoffset for buttery smooth animation.
+                  The circle starts at 3 o'clock by default, so we rotate -90°
+                  to make it start from 12 o'clock (matching our dial's 0°). */}
+              <circle
+                cx={CENTER}
+                cy={CENTER}
+                r={TRACK_RADIUS}
+                fill="none"
+                stroke="#1a9df3"
+                strokeWidth={STROKE_WIDTH}
+                strokeLinecap="round"
+                strokeDasharray={CIRCUMFERENCE}
+                strokeDashoffset={dashOffset}
+                transform={`rotate(-90 ${CENTER} ${CENTER})`}
+                style={{
+                  filter: isDragging ? 'url(#arc-glow)' : 'none',
+                  transition: isDragging ? 'filter 0.15s ease-out' : 'filter 0.3s ease',
+                }}
+              />
+
+              {/* ── Leading edge glow dot ─────────────────────────────────── */}
+              {/* A small radial glow at the arc's leading tip adds depth */}
+              {renderAngle > 1 && (
+                <circle
+                  cx={knobPos.x}
+                  cy={knobPos.y}
+                  r={8}
+                  fill="rgba(26, 157, 243, 0.15)"
                   style={{
-                    filter: isDragging
-                      ? 'drop-shadow(0 0 6px rgba(26, 157, 243, 0.35))'
-                      : 'none',
+                    transition: 'opacity 0.2s ease',
+                    opacity: isDragging ? 1 : 0.5,
                   }}
                 />
               )}
@@ -302,55 +425,81 @@ export function TimeCommitmentDial() {
               {ticks}
 
               {/* ── Draggable knob ────────────────────────────────────────── */}
+              {/* The knob uses a motion-value-driven scale for tactile feedback.
+                  SVG transform is used instead of CSS transform for cross-browser
+                  consistency — we translate to knob position, then scale in place. */}
               <g
                 style={{
-                  transition: isDragging ? 'none' : 'filter 0.2s ease',
                   filter: isDragging
-                    ? 'drop-shadow(0 2px 8px rgba(26, 157, 243, 0.4))'
+                    ? 'drop-shadow(0 3px 10px rgba(26, 157, 243, 0.45))'
                     : 'drop-shadow(0 1px 3px rgba(0,0,0,0.12))',
+                  transition: 'filter 0.2s ease',
                 }}
               >
-                {/* Outer ring */}
-                <circle
+                {/* Outer ring — scales with knobScale motion value */}
+                <Motion.circle
                   cx={knobPos.x}
                   cy={knobPos.y}
-                  r={isDragging ? KNOB_SIZE / 2 * 1.1 : KNOB_SIZE / 2}
+                  r={KNOB_SIZE / 2}
                   fill="white"
                   stroke="#1a9df3"
                   strokeWidth={3}
                   style={{
-                    transition: isDragging ? 'r 0.15s ease-out' : 'r 0.2s ease',
+                    scale: knobScale,
+                    transformOrigin: `${knobPos.x}px ${knobPos.y}px`,
                   }}
                 />
                 {/* Inner dot */}
-                <circle
+                <Motion.circle
                   cx={knobPos.x}
                   cy={knobPos.y}
                   r={4}
                   fill="#1a9df3"
+                  style={{
+                    scale: knobScale,
+                    transformOrigin: `${knobPos.x}px ${knobPos.y}px`,
+                  }}
                 />
               </g>
             </svg>
 
             {/* ── Center number display ────────────────────────────────────── */}
-            <Motion.div
+            {/* AnimatePresence handles the crossfade: exiting number slides up
+                and fades out while the entering number slides up from below.
+                `mode="popLayout"` ensures both are briefly visible for overlap. */}
+            <div
               className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-              style={{ scale: centerScale }}
               data-node-id="1622:3651"
             >
-              <p
-                className="text-[34px] text-black leading-none"
-                data-node-id="1622:3652"
-              >
-                {value}
-              </p>
-              <p
+              <div className="relative h-[42px] flex items-center justify-center overflow-hidden">
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <Motion.p
+                    key={displayValue}
+                    variants={numberVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{
+                      duration: 0.18,
+                      ease: [0.25, 0.1, 0.25, 1], // smooth ease — no bounce on numbers
+                    }}
+                    className="text-[34px] text-black leading-none"
+                    data-node-id="1622:3652"
+                  >
+                    {displayValue}
+                  </Motion.p>
+                </AnimatePresence>
+              </div>
+              <Motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: isLoaded ? 1 : 0 }}
+                transition={{ duration: 0.3, delay: 0.05 }}
                 className="text-[17px] text-black/50 leading-none mt-1"
                 data-node-id="1622:3653"
               >
                 {value === 1 ? 'Minute' : 'Minutes'}
-              </p>
-            </Motion.div>
+              </Motion.p>
+            </div>
           </div>
 
           {/* ── Helper text ──────────────────────────────────────────────── */}
@@ -368,7 +517,7 @@ export function TimeCommitmentDial() {
           data-node-id="1622:3656"
         >
           <Motion.button
-            whileHover={{ scale: 1.02, y: -1 }}
+            whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.97, y: 1 }}
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
             className={clsx(
@@ -383,7 +532,6 @@ export function TimeCommitmentDial() {
             }}
             data-node-id="1622:3657"
           >
-            {/* Inset shadow overlay — matches Figma */}
             <div className="absolute inset-0 pointer-events-none rounded-full shadow-[inset_0px_2px_1px_rgba(255,255,255,0.16),inset_0px_1.2px_1.2px_rgba(255,255,255,0.12),inset_0px_0px_1.2px_1.8px_rgba(0,0,0,0.1)]" />
             Continue
           </Motion.button>
