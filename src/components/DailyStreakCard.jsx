@@ -387,9 +387,9 @@ export function DailyStreakCard() {
             }
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
             className={clsx(
-              'relative w-full rounded-[8px] py-4 px-3',
+              'relative w-full rounded-[8px] py-3 px-3',
               'border border-white/40',
-              'text-white text-[20px] tracking-[0.4px] uppercase',
+              'text-white text-[18px] tracking-[0.4px] uppercase',
               'shadow-[0px_4px_2px_rgba(0,0,0,0.25),0px_4px_0px_#0b84d4]',
               'transition-opacity duration-200',
               checkedInToday || isAnimating
