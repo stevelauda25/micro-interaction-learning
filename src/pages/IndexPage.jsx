@@ -8,8 +8,18 @@ const PAGES = [
     description: 'Check-in card with flame animation, streak tracker, and bouncing circle fill.',
     status: 'done',
   },
-  // future entries go here, e.g.:
-  // { path: '/button-press', title: 'Button Press', description: '...', status: 'wip' },
+  {
+    path: '/time-commitment',
+    title: 'Time Commitment Dial',
+    description: 'Circular drag slider with smooth arc, knob micro-interactions, and real-time value updates.',
+    status: 'done',
+  },
+  {
+    path: '/short-escape',
+    title: 'Short Escape',
+    description: 'Trip detail page with staggered reveals, accordion days, dropdown, and premium CTA interactions.',
+    status: 'done',
+  },
 ]
 
 const STATUS_STYLES = {
