@@ -30,7 +30,7 @@ const PANEL_SECTIONS = [
   {
     title: 'System Control Panel',
     controls: [
-      { label: 'null', defaultValue: 60 },
+      { label: 'Threat Sensitivity', defaultValue: 60 },
       { label: 'Alert Threshold', defaultValue: 60 },
       { label: 'Response Intensity', defaultValue: 60 },
     ],
