@@ -42,42 +42,6 @@ function jitter(base, range) {
   return base + (Math.random() - 0.5) * range * 2
 }
 
-// ─── YouTube Glitch SFX Controller ───────────────────────────────────────────
-// Uses a hidden YouTube iframe to play the glitch sound effect.
-// Video ID: 7a5UMZ4kihM (from https://www.youtube.com/watch?v=7a5UMZ4kihM)
-//
-// How it works:
-//   - A persistent hidden iframe is mounted (0×0, no visibility)
-//   - To play: we set/reset the iframe src with autoplay=1
-//   - To prevent overlap: we destroy and recreate the src each trigger
-//   - YouTube's embed API handles playback; we just toggle the src
-//
-// Limitation: autoplay with sound requires prior user interaction.
-// The boot glitch may be silent (browser policy), but save-button
-// glitch always works since it follows a click event.
-const YT_VIDEO_ID = '7a5UMZ4kihM'
-
-function useGlitchAudio() {
-  const iframeRef = useRef(null)
-  const counterRef = useRef(0)
-
-  const play = useCallback(() => {
-    if (!iframeRef.current) return
-    // Increment counter to force src change → restarts playback cleanly
-    // This prevents overlapping: each new src kills the previous playback
-    counterRef.current += 1
-    iframeRef.current.src =
-      `https://www.youtube.com/embed/${YT_VIDEO_ID}?autoplay=1&start=0&end=3&controls=0&showinfo=0&rel=0&v=${counterRef.current}`
-  }, [])
-
-  const stop = useCallback(() => {
-    if (!iframeRef.current) return
-    iframeRef.current.src = 'about:blank'
-  }, [])
-
-  return { iframeRef, play, stop }
-}
-
 // ─── Grid dot pattern (background decoration) ───────────────────────────────
 function GridOverlay() {
   return (
@@ -678,33 +642,25 @@ export function SystemControlPanel() {
   const [values, setValues] = useState(DEFAULT_VALUES)
   const glitchTimeoutRef = useRef(null)
 
-  // YouTube audio controller — shared between boot and save glitches
-  const { iframeRef, play: playGlitchSound, stop: stopGlitchSound } = useGlitchAudio()
-
   // ── Page load boot glitch ──────────────────────────────────────────────────
   // STEP 1 (0–100ms): UI dimmed at opacity 0.8
   // STEP 2 (100–600ms): Boot glitch — scanlines, RGB shift, tearing, noise
   // STEP 3 (600–1000ms): Glitch fades, bloom flash, UI sharpens
-  // STEP 4: Play sound at step 2 start (may be silent per browser autoplay policy)
   useEffect(() => {
-    // Start boot glitch after a brief dim
     const bootTimer = setTimeout(() => {
       setIsGlitching(true)
-      playGlitchSound()
     }, 100)
 
-    // Resolve boot glitch
     const resolveTimer = setTimeout(() => {
       setIsGlitching(false)
       setIsBooting(false)
-      stopGlitchSound()
     }, 1000)
 
     return () => {
       clearTimeout(bootTimer)
       clearTimeout(resolveTimer)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -715,29 +671,24 @@ export function SystemControlPanel() {
   // ── Save Changes → enhanced glitch sequence ────────────────────────────────
   // State transitions:
   //   STEP 1 (0–100ms): isSaving=true, text → "SAVING...", button disabled
-  //   STEP 2 (100ms): isGlitching=true, play YouTube SFX
+  //   STEP 2 (100ms): isGlitching=true
   //   STEP 3 (100–900ms): intense distortion (GlitchOverlay handles animation)
   //   STEP 4 (900–1300ms): glitch resolves, bloom flash
   //   STEP 5 (1300ms): isGlitching=false, isSaving=false, button restored
   const handleSave = useCallback(() => {
     if (isSaving) return
 
-    // STEP 1: immediate feedback — disable button, change text
     setIsSaving(true)
 
-    // STEP 2: glitch starts after brief depress (100ms) + play sound
     setTimeout(() => {
       setIsGlitching(true)
-      playGlitchSound()
     }, 100)
 
-    // STEP 5: resolve — restore everything, stop audio
     glitchTimeoutRef.current = setTimeout(() => {
       setIsGlitching(false)
       setIsSaving(false)
-      stopGlitchSound()
     }, 1300)
-  }, [isSaving, playGlitchSound, stopGlitchSound])
+  }, [isSaving])
 
   // ── Reset → restore all control values to defaults ─────────────────────────
   // All bars animate back smoothly via Framer Motion's width transition (300ms easeOut).
@@ -767,20 +718,6 @@ export function SystemControlPanel() {
     >
       <GridOverlay />
       <GlitchOverlay isActive={isGlitching} />
-
-      {/* Hidden YouTube iframe for glitch SFX playback.
-          Mounted once, src is swapped to trigger/restart audio.
-          allow="autoplay" is required for programmatic playback. */}
-      <iframe
-        ref={iframeRef}
-        src="about:blank"
-        allow="autoplay"
-        title="Glitch SFX"
-        className="absolute"
-        style={{ width: 0, height: 0, border: 'none', opacity: 0, pointerEvents: 'none' }}
-        aria-hidden="true"
-        tabIndex={-1}
-      />
 
       {/* Container — boot dim + glitch jitter.
           isBooting: starts at opacity 0.8, fades to 1 as boot resolves.
