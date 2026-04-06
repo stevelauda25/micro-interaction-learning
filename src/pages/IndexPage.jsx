@@ -20,6 +20,12 @@ const PAGES = [
     description: 'Trip detail page with staggered reveals, accordion days, dropdown, and premium CTA interactions.',
     status: 'done',
   },
+  {
+    path: '/system-control',
+    title: 'System Control Panel',
+    description: 'Sci-fi control panel with glitch save effect, CRT popup close, progress bars, and layered interactions.',
+    status: 'done',
+  },
 ]
 
 const STATUS_STYLES = {

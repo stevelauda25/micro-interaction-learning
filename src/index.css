@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap');
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 body {
   margin: 0;
