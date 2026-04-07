@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { motion as Motion, AnimatePresence } from 'framer-motion'
+import { motion as Motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { SettingsModal } from '../components/SettingsModal'
 
 // ─── Figma SVG assets ────────────────────────────────────────────────────────
 import rocketSvg from '../assets/scan-shuttle/rocket.svg'
@@ -15,6 +16,10 @@ import menuActiveBgSvg from '../assets/scan-shuttle/menu-active-bg.svg'
 import menuInactiveBgSvg from '../assets/scan-shuttle/menu-inactive-bg.svg'
 import menuArrowActiveSvg from '../assets/scan-shuttle/menu-arrow-active.svg'
 import menuArrowInactiveSvg from '../assets/scan-shuttle/menu-arrow-inactive.svg'
+// Figma node 1697:32347 — exact diagonal stripe mask exported as SVG
+import headerStripesSvg from '../assets/scan-shuttle/header-stripes.svg'
+// Fuel System assets
+import btnOutlineSvg from '../assets/fuel-system/btn-outline.svg'
 
 // ─── Design tokens (from Figma) ─────────────────────────────────────────────
 const CYAN = '#27C3CC'
@@ -54,34 +59,474 @@ const TELEMETRY_RIGHT = [
 ]
 
 
+// ─── Fuel System: design tokens ─────────────────────────────────────────────
+const FUEL_COLOR = '#FCB900'
+const CAN_STROKE = 'white'
+
+const FUEL_TELEMETRY_LEFT = [
+  'FUEL CONSUMPTION RATE',
+  'ENGINE FEED STATUS',
+  'FLOW VELOCITY',
+  'BURN MODE',
+]
+const FUEL_TELEMETRY_RIGHT = [
+  '12.4 L/MIN',
+  'STABLE /',
+  '3.1 M/S',
+  'IDLE',
+]
+
+// ─── Jerry can SVG paths (from Figma node 1700:81193, viewBox 0 0 300 428) ──
+const CAN_OUTLINE = 'M2.02234 81.6827L2.01062 69.2286C2.00996 67.3585 1.97308 65.3344 2.03602 63.4834L2.06922 62.7012C2.1548 61.0701 3.24098 59.1646 4.94129 57.5157C6.62991 55.878 8.67932 54.7341 10.3104 54.4512C13.0785 53.9711 16.9632 54.1999 20.119 54.2481H20.1229C23.5187 54.2896 26.9147 54.2946 30.3104 54.2618L30.3095 54.2608C50.1098 54.2226 70.1806 54.41 90.0067 54.3555C92.5626 54.4329 95.5368 53.7913 98.243 52.6446C100.944 51.5 103.521 49.7912 105.174 47.6172C109.235 42.2736 111.66 35.6584 114.126 29.4161C116.626 23.0865 119.178 17.1059 123.453 12.545C128.652 6.99789 136.687 4.0966 144.439 3.99712C153.442 4.26178 163.486 4.08061 172.474 4.0811H172.475L223.735 4.06645L241.378 4.06743H241.379C247.711 4.0634 254.209 3.78729 260.118 5.15727C261.658 5.51407 263.979 6.55792 266.275 7.877C268.425 9.11196 270.392 10.4949 271.546 11.6075L271.766 11.8262C276.639 16.8472 279.419 23.9944 282.071 30.9151L283.206 33.8604L291.481 55.3506C292.537 58.1418 293.988 61.5701 295.248 64.8077C296.539 68.1262 297.692 71.3932 298.298 74.1895L298.299 74.1905C298.372 74.5273 298.437 75.259 298.483 76.3086C298.528 77.3217 298.55 78.5338 298.56 79.7676C298.581 82.2457 298.551 84.7298 298.551 85.8545V104.954L298.469 169.498V169.501L298.593 395.687V395.688C298.595 397.69 298.639 400.319 298.258 401.962V401.963C296.95 407.608 293.513 413.569 289.408 417.619C285.081 421.889 280.624 424.732 274.757 425.858L274.756 425.859C270.291 426.718 265.096 426.492 260.24 426.499H260.241L239.108 426.484H239.107L155.79 426.47L67.7528 426.46H67.7518L41.8446 426.48H41.8397C37.4027 426.5 32.2518 426.808 28.1473 426.322H28.1464C15.3453 424.812 4.42485 413.478 2.19617 400.864C1.85646 398.941 1.79119 396.183 1.8241 393.259C1.85555 390.466 1.98438 387.299 1.995 385.106V385.102L2.0243 354.516V354.509L1.75769 289.456C1.75626 288.146 1.81422 286.807 1.87488 285.428C1.935 284.061 1.99805 282.655 2.00379 281.257C2.18158 266.298 2.15149 251.339 1.91297 236.382L1.79773 229.972C1.68232 223.214 1.8623 216.614 1.84266 209.82L2.04383 121.963V121.959L2.02234 81.6836V81.6827Z'
+const CAP_PATH = 'M44.0091 0.669351C54.0742 0.398126 64.7382 0.319041 74.7364 1.13445C75.9441 1.23288 79.4378 4.12958 79.6441 5.23332C80.86 11.7412 80.3124 19.1008 80.3878 25.81C76.1312 25.8935 71.1831 25.7059 66.8743 25.6523C54.7958 25.9012 41.909 25.6855 29.7257 25.7877C29.8474 19.0608 29.6538 12.7793 29.977 5.99618C30.5566 4.98367 31.2636 4.05 32.0809 3.21798C35.2978 -0.0121827 39.5924 0.690177 44.0091 0.669351Z'
+const NECK_PATH = 'M25.5965 32.1602C25.8633 32.1471 26.13 32.1352 26.3967 32.1252C30.3429 31.9703 34.702 32.1042 38.6884 32.1079L62.0052 32.1136L77.3786 32.1175C82.9891 32.1272 89.0552 31.2612 93.2743 35.5428C96.9081 39.2306 97.5112 41.8735 97.6553 46.818L84.9494 46.91C69.016 46.6559 52.6287 46.9283 36.64 46.9048L22.0215 46.8842C19.6831 46.883 14.7989 46.7635 12.738 47.1889C13.6675 38.4095 15.8239 33.0249 25.5965 32.1602Z'
+const LIQUID_CLIP = 'M144.037 0C153.021 0.265027 163.025 0.0835466 172.059 0.0840424L223.32 0.0686722L240.962 0.069913C247.199 0.0659463 253.904 -0.219658 260.005 1.19473C263.471 1.99774 269.831 5.67813 272.313 8.23642C278.121 14.2197 281.058 23.071 284.04 30.7174L292.318 52.2128C294.449 57.8493 297.935 65.4377 299.194 71.2504C299.598 73.111 299.477 81.0086 299.477 83.1997V102.299L299.395 166.845L299.519 393.031C299.521 394.942 299.576 397.776 299.149 399.611C297.781 405.516 294.211 411.699 289.935 415.919C285.478 420.317 280.793 423.332 274.593 424.522C269.965 425.412 264.579 425.179 259.824 425.186L238.691 425.171L155.374 425.156L67.337 425.146L41.4299 425.166C37.1134 425.186 31.7868 425.498 27.5736 425C14.1236 423.413 2.77913 411.578 0.458381 398.443C-0.269673 394.322 0.214954 386.952 0.236768 382.445L0.266018 351.859L3.23661e-05 286.807C-0.00319021 284.114 0.235281 281.325 0.245941 278.586C0.448963 261.504 0.380545 244.422 0.0401912 227.343C-0.0753257 220.585 0.104643 213.891 0.0850593 207.162L0.285354 119.304L0.264036 79.0287L0.252386 66.5741C0.251642 64.4782 0.202557 62.0741 0.312868 59.9755C0.534482 55.7516 5.71638 51.1582 9.66528 50.4734C12.5968 49.9649 16.6868 50.2047 19.7232 50.251C23.1094 50.2924 26.4958 50.2966 29.882 50.2639C49.7833 50.2255 69.7217 50.4134 89.6275 50.3584C94.2787 50.5007 100.759 48.0051 103.689 44.1497C111.536 33.8248 113.113 18.5159 122.058 8.97175C127.564 3.09727 135.99 0.0959453 144.037 0Z'
+
+// ─── Sine wave path generator for liquid surface ────────────────────────────
+// Creates a smooth SVG path representing a liquid surface with wave motion.
+//   y: base Y position     amplitude: wave height
+//   frequency: wave peaks   phase: horizontal offset (animated)
+function generateWavePath(y, amplitude, frequency, phase, width = 600) {
+  const segments = 60
+  const step = width / segments
+  let path = `M ${-width / 2} ${y}`
+  for (let i = 0; i <= segments; i++) {
+    const x = -width / 2 + i * step
+    const waveY = y + Math.sin((i / segments) * Math.PI * 2 * frequency + phase) * amplitude
+    const wave2 = Math.sin((i / segments) * Math.PI * 2 * (frequency * 1.7) + phase * 0.6) * amplitude * 0.3
+    path += ` L ${x} ${waveY + wave2}`
+  }
+  path += ` L ${width / 2} 500 L ${-width / 2} 500 Z`
+  return path
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: FuelButton — "ADD MORE FUEL" with fill states
+// ═══════════════════════════════════════════════════════════════════════════════
+function FuelButton({ onClick, isFilling, isComplete }) {
+  const label = isFilling ? 'FILLING...' : isComplete ? 'TANK FULL' : 'ADD MORE FUEL'
+  return (
+    <Motion.button
+      type="button"
+      className="relative w-[206px] h-[36px] cursor-pointer select-none"
+      onClick={onClick}
+      whileHover={!isFilling ? { scale: 1.03 } : {}}
+      whileTap={!isFilling ? { scale: 0.97 } : {}}
+      disabled={isFilling || isComplete}
+      aria-label={label}
+    >
+      <img src={btnOutlineSvg} alt="" className="absolute inset-0 w-full h-full" />
+      <Motion.div
+        className="absolute inset-0 rounded-sm pointer-events-none"
+        animate={{
+          boxShadow: isFilling
+            ? '0 0 20px rgba(252,185,0,0.3), inset 0 0 10px rgba(252,185,0,0.05)'
+            : '0 0 0px transparent',
+        }}
+        transition={{ duration: 0.3 }}
+      />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <AnimatePresence mode="wait">
+          <Motion.span
+            key={label}
+            className="text-[12px] font-medium uppercase"
+            style={{ fontFamily: FONT_BDO, color: CYAN }}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+          >
+            {label}
+          </Motion.span>
+        </AnimatePresence>
+      </div>
+    </Motion.button>
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: FuelSystemView — interactive jerry can with drag physics
+//
+// Three interconnected systems:
+//
+// 1. DRAG → ROTATION MAPPING
+//    Horizontal drag delta maps to can rotation (drag right = +deg, left = -deg).
+//    Vertical drag adds slight Y translation. Both follow the cursor with DELAY
+//    via useSpring, creating a "heavy object with inertia" feel.
+//    Rotation is clamped to ±10° to prevent unrealistic tilt.
+//
+// 2. LIQUID REACTION LOGIC
+//    Wave amplitude is driven by drag velocity (speed = sqrt(dx²+dy²)).
+//    Fast drags produce strong waves (up to 20px amplitude), slow drags are subtle.
+//    The wave phase direction is influenced by the can's tilt — liquid sloshes
+//    opposite to the direction of movement, just like real physics.
+//    During fill, amplitude spikes to simulate turbulence.
+//
+// 3. INERTIA SYSTEM
+//    On release, useSpring overshoots past center (stiffness 200, damping 15)
+//    creating a bounce-back effect. Wave amplitude decays at 0.92× per frame,
+//    so liquid continues sloshing briefly after the can settles.
+//    The spring's mass parameter (0.8) adds perceived weight.
+// ═══════════════════════════════════════════════════════════════════════════════
+function FuelSystemView({ fuelLevel, isFilling, isComplete, onAddFuel }) {
+  const containerRef = useRef(null)
+  const rafRef = useRef(null)
+
+  // ─── Animated counting display ────────────────────────────────────────
+  // Direct DOM ref for the percentage text — updated in the same rAF loop
+  // as waves so counting stays perfectly synced with liquid level.
+  // No React re-renders per frame; only a state flip when reaching 100%.
+  const percentTextRef = useRef(null)
+  const [showFull, setShowFull] = useState(false)
+  const fullTriggeredRef = useRef(false)
+
+  // ─── Drag → rotation: motion values with spring physics ───────────────
+  // Raw values track the cursor offset; springs add inertia + overshoot
+  const rawX = useMotionValue(0)
+  const rawY = useMotionValue(0)
+  const rawRotate = useMotionValue(0)
+
+  // Spring config: stiffness controls snap-back speed, damping controls overshoot
+  // Low damping (15) = more bounce on release. Mass adds perceived weight.
+  const springX = useSpring(rawX, { stiffness: 200, damping: 15, mass: 0.8 })
+  const springY = useSpring(rawY, { stiffness: 200, damping: 15, mass: 0.8 })
+  const springRotate = useSpring(rawRotate, { stiffness: 250, damping: 12, mass: 0.5 })
+
+  // ─── Wave state (mutated per rAF frame — no React rerenders) ──────────
+  const waveState = useRef({
+    phase: 0,
+    amplitude: 2,            // idle amplitude (subtle calm wave)
+    targetAmplitude: 2,
+    isDragging: false,
+    lastX: 0,
+    lastY: 0,
+  })
+
+  // Displayed fuel level (animated smoothly during fill)
+  const displayLevelRef = useRef(fuelLevel)
+
+  // Direct SVG refs for 60fps wave updates (no React rerender)
+  const wave1Ref = useRef(null)
+  const wave2Ref = useRef(null)
+  const wave3Ref = useRef(null)
+  const wave4Ref = useRef(null)
+
+  // ─── Animated counting logic ──────────────────────────────────────────
+  // Uses requestAnimationFrame to increment the displayed percentage
+  // step-by-step (12 → 13 → 14 → ... → 100) with ease-out timing.
+  // The ease-out cubic (1 - (1-t)^3) makes counting slower near the end,
+  // avoiding a mechanical linear feel. The percentage text is updated via
+  // direct DOM ref (percentTextRef) to avoid React re-renders per frame,
+  // keeping wave animation and counting perfectly in sync.
+  // When the count reaches 100, a React state flip (setShowFull) triggers
+  // the "FULL" text transition with amber color + scale pop.
+  useEffect(() => {
+    if (fuelLevel === displayLevelRef.current) return
+    const start = displayLevelRef.current
+    const end = fuelLevel
+    const duration = 1800 // ~1.8s fill — slightly longer for visible counting
+    const startTime = performance.now()
+
+    // Spike wave amplitude during fill (turbulence effect)
+    waveState.current.targetAmplitude = 8
+
+    function tick(now) {
+      const elapsed = now - startTime
+      const t = Math.min(elapsed / duration, 1)
+      // Ease-out cubic: fast start, slows near end — counting decelerates
+      const eased = 1 - Math.pow(1 - t, 3)
+      const current = start + (end - start) * eased
+      displayLevelRef.current = current
+
+      // ── Counting display: update DOM text directly (no re-render) ──
+      // Math.round ensures we show whole numbers: 42 → 43 → 44 → ... → 100
+      if (percentTextRef.current) {
+        percentTextRef.current.textContent = `${Math.round(current)}% / 100%`
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(tick)
+      } else {
+        // Fill complete — settle waves and trigger "FULL" state if at 100
+        waveState.current.targetAmplitude = 2
+        if (Math.round(end) >= 100 && !fullTriggeredRef.current) {
+          fullTriggeredRef.current = true
+          setShowFull(true)
+        }
+      }
+    }
+    requestAnimationFrame(tick)
+  }, [fuelLevel])
+
+  // ─── Main animation loop (requestAnimationFrame) ──────────────────────
+  useEffect(() => {
+    function animate() {
+      const ws = waveState.current
+      const dt = 1 / 60
+
+      // Phase advances for continuous wave motion
+      ws.phase += dt * (1.2 + ws.amplitude * 0.15)
+
+      // ── Inertia system: wave amplitude decay ──
+      // When not dragging, amplitude lerps toward target (idle = 2).
+      // Decay factor 0.92 per frame means waves persist ~0.5s after release,
+      // creating the "liquid keeps sloshing" effect.
+      if (!ws.isDragging) {
+        ws.amplitude += (ws.targetAmplitude - ws.amplitude) * 0.04
+        if (ws.amplitude > ws.targetAmplitude + 0.5) {
+          ws.amplitude *= 0.92 // decay — wave energy dissipates per frame
+        }
+      }
+
+      // Liquid surface Y — maps fuel level to can internal height
+      // Can body spans y=105 (full) to y=425 (empty), 320px range
+      const level = displayLevelRef.current
+      const minY = 425
+      const maxY = 105
+      const baseY = minY - (level / 100) * (minY - maxY)
+
+      // 4 wave layers at different opacities for depth
+      const amp = ws.amplitude
+      if (wave1Ref.current) wave1Ref.current.setAttribute('d', generateWavePath(baseY - 30, amp * 0.6, 1.2, ws.phase * 0.7))
+      if (wave2Ref.current) wave2Ref.current.setAttribute('d', generateWavePath(baseY - 15, amp * 0.8, 1.5, ws.phase * 0.9))
+      if (wave3Ref.current) wave3Ref.current.setAttribute('d', generateWavePath(baseY - 5, amp * 0.9, 1.8, ws.phase * 1.1))
+      if (wave4Ref.current) wave4Ref.current.setAttribute('d', generateWavePath(baseY + 5, amp, 2.0, ws.phase))
+
+      rafRef.current = requestAnimationFrame(animate)
+    }
+    rafRef.current = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [])
+
+  // ─── Pointer handlers: unified drag for can movement + liquid ─────────
+  const handlePointerDown = useCallback((e) => {
+    const ws = waveState.current
+    ws.isDragging = true
+    ws.lastX = e.clientX
+    ws.lastY = e.clientY
+    containerRef.current?.setPointerCapture(e.pointerId)
+  }, [])
+
+  const handlePointerMove = useCallback((e) => {
+    const ws = waveState.current
+    if (!ws.isDragging) return
+
+    const dx = e.clientX - ws.lastX
+    const dy = e.clientY - ws.lastY
+    const speed = Math.sqrt(dx * dx + dy * dy)
+    ws.lastX = e.clientX
+    ws.lastY = e.clientY
+
+    // ── Drag → rotation mapping ──
+    // Horizontal delta directly maps to rotation angle.
+    // Multiplier 0.15 keeps rotation proportional to drag distance.
+    // Clamped to ±10° to prevent unrealistic tilt.
+    const currentRotate = rawRotate.get()
+    const newRotate = Math.max(-10, Math.min(10, currentRotate + dx * 0.15))
+    rawRotate.set(newRotate)
+
+    // ── Drag → translation (delayed by spring) ──
+    // Small offset multipliers (0.3x, 0.15y) create "heavy object" feel.
+    // The spring's inertia means the can lags behind the cursor.
+    rawX.set(rawX.get() + dx * 0.3)
+    rawY.set(rawY.get() + dy * 0.15)
+
+    // ── Liquid reaction: velocity → wave amplitude ──
+    // Higher drag speed = stronger waves. Clamped at 20 to prevent distortion.
+    // Smooth blend (0.7/0.3) prevents jarring amplitude jumps.
+    const mappedAmplitude = Math.min(2 + speed * 0.8, 20)
+    ws.amplitude = ws.amplitude * 0.7 + mappedAmplitude * 0.3
+    ws.targetAmplitude = mappedAmplitude
+  }, [rawX, rawY, rawRotate])
+
+  const handlePointerUp = useCallback((e) => {
+    const ws = waveState.current
+    ws.isDragging = false
+    // Wave settles to idle — inertia carries briefly via 0.92 decay
+    ws.targetAmplitude = 2
+    // ── Spring return: setting to 0 triggers overshoot bounce-back ──
+    // The spring (stiffness:200, damping:15) will overshoot past 0
+    // then oscillate to rest — creating the "release bounce" effect.
+    rawX.set(0)
+    rawY.set(0)
+    rawRotate.set(0)
+    containerRef.current?.releasePointerCapture(e.pointerId)
+  }, [rawX, rawY, rawRotate])
+
+  return (
+    <Motion.div
+      className="flex-1 flex flex-col items-center gap-[20px] min-w-0 max-w-[700px]"
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: EASE_OUT }}
+    >
+      {/* Orbit / Mission header row */}
+      <div className="flex items-center justify-between w-full" style={{ fontFamily: FONT_OXANIUM }}>
+        <span className="text-[18px] font-medium uppercase" style={{ color: WHITE }}>
+          ORBIT: LEO TRANSFER
+        </span>
+        <span className="text-[18px] font-medium uppercase text-right" style={{ color: WHITE }}>
+          MISSION ID: B01-ARTEMIS
+        </span>
+      </div>
+
+      {/* Main viewport — 650px tall, rulers + jerry can + telemetry */}
+      <div className="relative w-full h-[650px] overflow-hidden">
+        {/* Side rulers */}
+        <div className="absolute left-0 top-0 w-[40px] h-[650px]">
+          <img src={rulerLeftSvg} alt="" className="w-full h-full" />
+        </div>
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[40px] h-[650px]">
+          <img src={rulerRightSvg} alt="" className="w-full h-full" />
+        </div>
+
+        {/* Telemetry labels — fuel-specific data */}
+        <div className="absolute left-[52px] top-0 flex flex-col gap-[16px] opacity-70">
+          {FUEL_TELEMETRY_LEFT.map((label) => (
+            <p key={label} className="text-[15px] font-medium uppercase" style={{ fontFamily: FONT_OXANIUM, color: CYAN }}>
+              {label}
+            </p>
+          ))}
+        </div>
+        {/* Right column values — layout fix: anchored from RIGHT edge to prevent
+             overflow clipping. Flex row [line][text] keeps text BESIDE the line.
+             right-[52px] = 40px ruler + 12px gap from viewport right edge. */}
+        <div className="absolute right-[52px] top-0 flex flex-col gap-[16px] opacity-70">
+          {FUEL_TELEMETRY_RIGHT.map((val, i) => (
+            <div key={i} className="flex items-center gap-[8px]">
+              <div className="w-[16px] h-[1px] shrink-0" style={{ backgroundColor: 'rgba(39,195,204,0.4)' }} />
+              <span
+                className="text-[15px] font-medium uppercase whitespace-nowrap"
+                style={{ fontFamily: FONT_OXANIUM, color: CYAN }}
+              >
+                {val}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Interactive jerry can — the whole object moves on drag ── */}
+        <div className="absolute left-1/2 top-[calc(50%-7px)] -translate-x-1/2 -translate-y-1/2">
+          <Motion.div
+            ref={containerRef}
+            className="relative select-none touch-none"
+            style={{
+              width: 300,
+              height: 428,
+              cursor: 'grab',
+              // Spring-driven transform: whole can moves + rotates on drag
+              x: springX,
+              y: springY,
+              rotate: springRotate,
+            }}
+            // Hover micro-interaction: slight scale-up
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ cursor: 'grabbing' }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          >
+            <svg viewBox="0 0 300 428" width="300" height="428" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <clipPath id="fuelCanClip">
+                  <path d={LIQUID_CLIP} />
+                </clipPath>
+              </defs>
+
+              {/* Liquid layers (clipped inside can body) — 4 layers for depth */}
+              <g clipPath="url(#fuelCanClip)">
+                <path ref={wave1Ref} fill={FUEL_COLOR} fillOpacity="0.265" />
+                <path ref={wave2Ref} fill={FUEL_COLOR} fillOpacity="0.4" />
+                <path ref={wave3Ref} fill={FUEL_COLOR} fillOpacity="0.53" />
+                <path ref={wave4Ref} fill={FUEL_COLOR} fillOpacity="1" />
+              </g>
+
+              {/* Can outline (on top of liquid) */}
+              <path d={CAN_OUTLINE} stroke={CAN_STROKE} strokeWidth="2.68" opacity="0.4" />
+              <path d={CAP_PATH} fill={CAN_STROKE} opacity="0.4" />
+              <path d={NECK_PATH} fill={CAN_STROKE} opacity="0.4" />
+
+              {/* Structural lines */}
+              <path d="M256 4C256 8.80572 256 286.002 256 424" stroke={CAN_STROKE} strokeWidth="2" opacity="0.4" />
+              <path d="M40 56C40 60.2679 40 306.445 40 429" stroke={CAN_STROKE} strokeWidth="2" opacity="0.4" />
+              <path d="M298 105C294.625 105 99.9269 105 3.00001 105" stroke={CAN_STROKE} strokeWidth="2" opacity="0.4" />
+
+              {/* Measurement marks inside can body */}
+              <g transform="translate(170, 118)" opacity="0.4">
+                <path d="M0.75 0V12M0.75 6H87.75M87.75 0V12" stroke={CAN_STROKE} strokeWidth="1.5" />
+                <path d="M23.75 74V86M23.75 80H87.75M87.75 74V86" stroke={CAN_STROKE} strokeWidth="1.5" />
+                <path d="M0.75 148V160M0.75 154H87.75M87.75 148V160" stroke={CAN_STROKE} strokeWidth="1.5" />
+                <path d="M23.75 222V234M23.75 228H87.75M87.75 222V234" stroke={CAN_STROKE} strokeWidth="1.5" />
+              </g>
+
+              {/* Highlight / reflection — subtle gradient overlay for glass-like feel */}
+              <defs>
+                <linearGradient id="canHighlight" x1="80" y1="60" x2="220" y2="420" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="white" stopOpacity="0.06" />
+                  <stop offset="40%" stopColor="white" stopOpacity="0" />
+                  <stop offset="100%" stopColor="white" stopOpacity="0.03" />
+                </linearGradient>
+              </defs>
+              <path d={CAN_OUTLINE} fill="url(#canHighlight)" />
+            </svg>
+          </Motion.div>
+        </div>
+
+        {/* Fuel percentage — animated counting display
+             percentTextRef is updated via DOM in the rAF counting loop.
+             When showFull triggers, AnimatePresence crossfades to "FULL"
+             with amber color (#EB9E45) and a scale pop (1 → 1.1 → 1). */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-[560px]">
+          <AnimatePresence mode="wait">
+            {showFull ? (
+              <Motion.p
+                key="full"
+                className="text-[24px] font-semibold uppercase text-center"
+                style={{ fontFamily: FONT_OXANIUM, color: AMBER }}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: [1.1, 1] }}
+                transition={{
+                  opacity: { duration: 0.3 },
+                  scale: { duration: 0.4, ease: [0.34, 1.56, 0.64, 1] },
+                }}
+              >
+                FULL
+              </Motion.p>
+            ) : (
+              <Motion.p
+                key="counting"
+                ref={percentTextRef}
+                className="text-[24px] font-semibold uppercase text-center"
+                style={{ fontFamily: FONT_OXANIUM, color: WHITE }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
+              >
+                {fuelLevel}% / 100%
+              </Motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* ADD MORE FUEL button */}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-0">
+          <FuelButton onClick={onAddFuel} isFilling={isFilling} isComplete={isComplete} />
+        </div>
+      </div>
+    </Motion.div>
+  )
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENT: Dot grid background (matching Figma ellipse pattern)
 // ═══════════════════════════════════════════════════════════════════════════════
 function DotGrid() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-      {/* ── Diagonal stripe texture (Figma: "Mask group" across full page) ──
-           Subtle repeating diagonal bars at ~120° that span the entire
-           background. Very low opacity (2-3%) to not overpower content.
-           This is the "system panel" texture visible in the Figma design. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `repeating-linear-gradient(
-            120deg,
-            transparent 0px,
-            transparent 24px,
-            rgba(39,195,204,0.025) 24px,
-            rgba(39,195,204,0.025) 26px,
-            transparent 26px,
-            transparent 50px,
-            rgba(255,255,255,0.015) 50px,
-            rgba(255,255,255,0.015) 52px
-          )`,
-        }}
-      />
-
-      {/* Dot grid overlay */}
+      {/* Figma node 1696:13712 — dot grid pattern */}
       <div
         className="absolute inset-0 opacity-[0.04]"
         style={{
@@ -90,8 +535,7 @@ function DotGrid() {
         }}
       />
 
-      {/* ── Background circles — centered on page ──
-           Figma shows two concentric ellipses roughly centered. */}
+      {/* Figma node 1696:23822 — inner ellipse: 952×952 at x:124 y:4 */}
       <div
         className="absolute rounded-full"
         style={{
@@ -101,6 +545,7 @@ function DotGrid() {
           border: '1px solid rgba(39,195,204,0.06)',
         }}
       />
+      {/* Figma node 1697:23836 — outer ellipse: 1222×1222 at x:-11 y:-131 */}
       <div
         className="absolute rounded-full"
         style={{
@@ -116,57 +561,29 @@ function DotGrid() {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// COMPONENT: Header bar — back button, title, settings
+// COMPONENT: Header — Figma node 1696:23796
+// Exact values: px-[52px] py-[24px], stripe mask 1461×231 at opacity 0.2
 // ═══════════════════════════════════════════════════════════════════════════════
-function Header({ onBack }) {
+function Header({ onBack, onSettings }) {
   return (
     <Motion.div
-      className="relative flex items-center justify-between px-[32px] py-[20px] overflow-hidden"
+      // Figma: px-[52px] py-[24px], items-end, justify-between
+      className="relative flex items-end justify-between px-[52px] py-[24px] overflow-hidden"
       initial={{ opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: EASE_OUT }}
     >
-      {/* ── Diagonal stripe pattern (Figma: "Mask group" 1697:32347) ──
-           Repeating ~120° diagonal bars across the header background.
-           Matches the subtle dark stripe texture visible in Figma.
-           Uses repeating-linear-gradient with two slightly different
-           dark tones to create the striped depth effect. */}
+      {/* Figma node 1697:32347 — "Mask group"
+           Exact SVG: 1461.005×230.86px, vertically centered, opacity 0.2
+           Contains real diagonal parallelogram stripes exported from Figma */}
       <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `repeating-linear-gradient(
-            120deg,
-            transparent 0px,
-            transparent 18px,
-            rgba(39,195,204,0.03) 18px,
-            rgba(39,195,204,0.03) 20px,
-            transparent 20px,
-            transparent 38px,
-            rgba(255,255,255,0.02) 38px,
-            rgba(255,255,255,0.02) 40px
-          )`,
-          backgroundSize: '40px 100%',
-        }}
-      />
+        className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ width: 1461, height: 231 }}
+      >
+        <img src={headerStripesSvg} alt="" className="w-full h-full" />
+      </div>
 
-      {/* Top edge glow line — thin cyan line at header top */}
-      <div
-        className="absolute top-0 inset-x-0 h-[1px]"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${CYAN} 15%, ${CYAN} 85%, transparent)`,
-          opacity: 0.15,
-        }}
-      />
-      {/* Bottom edge line — subtle separator */}
-      <div
-        className="absolute bottom-0 inset-x-0 h-[1px]"
-        style={{
-          background: `linear-gradient(90deg, ${CYAN} 0%, rgba(39,195,204,0.3) 30%, rgba(39,195,204,0.3) 70%, ${CYAN} 100%)`,
-          opacity: 0.1,
-        }}
-      />
-
-      {/* Back button — using Figma SVG */}
+      {/* Figma node 1696:23797 — Back button 40×40 */}
       <button
         type="button"
         onClick={onBack}
@@ -180,8 +597,11 @@ function Header({ onBack }) {
         />
       </button>
 
-      {/* Title */}
-      <div className="flex items-center gap-3 z-10" style={{ fontFamily: FONT_BDO }}>
+      {/* Figma node 1696:23816 — Title gap-[12px], BDO Grotesk Medium 28px */}
+      <div
+        className="flex items-center gap-[12px] z-10"
+        style={{ fontFamily: FONT_BDO }}
+      >
         <span className="text-[28px] font-medium leading-[1.2]" style={{ color: CYAN }}>
           B-01
         </span>
@@ -190,9 +610,10 @@ function Header({ onBack }) {
         </span>
       </div>
 
-      {/* Settings button — using Figma SVG */}
+      {/* Figma node 1699:51891 — Settings button 40×40 */}
       <button
         type="button"
+        onClick={onSettings}
         className="relative w-[40px] h-[40px] cursor-pointer shrink-0 group z-10"
         aria-label="Settings"
       >
@@ -210,16 +631,22 @@ function Header({ onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENT: Left menu — sci-fi module selector
 // ═══════════════════════════════════════════════════════════════════════════════
-function MenuItem({ item, isActive, onClick, index }) {
+function MenuItem({ item, isActive, isDisabled, onClick, index }) {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
     <Motion.button
       type="button"
       // Figma: each menu item is 56px tall, 24px horizontal padding, 10px vertical
-      className="relative w-full h-[56px] flex items-center justify-between px-[24px] py-[10px] cursor-pointer select-none shrink-0"
-      onClick={() => onClick(index)}
-      onMouseEnter={() => setIsHovered(true)}
+      // Disabled items: opacity 0.4, no pointer events — only index 0 and 2 are functional
+      className="relative w-full h-[56px] flex items-center justify-between px-[24px] py-[10px] select-none shrink-0"
+      style={{
+        cursor: isDisabled ? 'default' : 'pointer',
+        opacity: isDisabled ? 0.4 : 1,
+        pointerEvents: isDisabled ? 'none' : 'auto',
+      }}
+      onClick={() => !isDisabled && onClick(index)}
+      onMouseEnter={() => !isDisabled && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
@@ -313,11 +740,14 @@ function LeftMenu({ activeIndex, onSelect }) {
       className="flex flex-col gap-[16px]"
       aria-label="System modules"
     >
+      {/* Only index 0 (Space Shuttle) and 2 (Fuel System) are functional.
+           All other menu items are disabled: opacity 0.4, pointer-events none. */}
       {MENU_ITEMS.map((item, i) => (
         <MenuItem
           key={item.code}
           item={item}
           isActive={activeIndex === i}
+          isDisabled={i !== 0 && i !== 2}
           onClick={onSelect}
           index={i}
         />
@@ -519,9 +949,8 @@ function ScanButton({ isScanning, isComplete, onClick }) {
   return (
     <Motion.button
       type="button"
-      // Enlarged button: Figma base is 206×36, scaled up for visual dominance
-      // as primary CTA — 260×48 feels proportional to the shuttle viewport
-      className="relative w-[260px] h-[48px] cursor-pointer select-none"
+      // Figma node 1697:32836 — exact: w-[206px] h-[36px], py-[12px]
+      className="relative w-[206px] h-[36px] cursor-pointer select-none"
       onClick={onClick}
       whileHover={!isScanning && !isComplete ? { scale: 1.03 } : {}}
       whileTap={!isScanning && !isComplete ? { scale: 0.97 } : {}}
@@ -548,13 +977,13 @@ function ScanButton({ isScanning, isComplete, onClick }) {
         transition={{ duration: 0.3, ease: EASE_OUT }}
       />
 
-      {/* Label — 14px for enlarged button, tracking for sci-fi feel */}
+      {/* Figma node 1697:32838 — BDO Grotesk Medium, 12px, #27c3cc, uppercase */}
       <div className="absolute inset-0 flex items-center justify-center">
         <AnimatePresence mode="wait">
           <Motion.span
             key={label}
-            className="text-[14px] font-medium uppercase"
-            style={{ fontFamily: FONT_BDO, color: CYAN, letterSpacing: '0.1em' }}
+            className="text-[12px] font-medium uppercase"
+            style={{ fontFamily: FONT_BDO, color: '#27c3cc' }}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
@@ -588,27 +1017,43 @@ function TelemetryLabels({ scanPhase }) {
 
   return (
     <>
-      {/* Coordinate badges */}
-      <div className="absolute left-[52px] top-[107px] flex items-center justify-center px-1 py-0.5 opacity-60"
-        style={{ border: `1px solid ${CYAN}` }}>
-        <span className="text-[14px] font-medium uppercase" style={{ fontFamily: FONT_OXANIUM, color: CYAN }}>
+      {/* Figma node 1697:32738 — Left coordinate badge
+           Exact: border 1px solid #27c3cc, opacity 0.6, px-[4px] py-[2px]
+           Font: Oxanium Medium 14px, #27c3cc, uppercase */}
+      <div
+        className="absolute left-[52px] top-[107px] flex items-center justify-center px-[4px] py-[2px] opacity-60"
+        style={{ border: '1px solid #27c3cc' }}
+      >
+        <span
+          className="text-[14px] font-medium uppercase"
+          style={{ fontFamily: FONT_OXANIUM, color: '#27c3cc' }}
+        >
           20,7 N
         </span>
       </div>
-      <div className="absolute right-[52px] top-[107px] flex items-center justify-center px-1 py-0.5 opacity-60"
-        style={{ border: `1px solid ${CYAN}` }}>
-        <span className="text-[14px] font-medium uppercase" style={{ fontFamily: FONT_OXANIUM, color: CYAN }}>
+      {/* Figma node 1697:32739 — Right coordinate badge
+           Anchored from right edge to prevent overflow clipping */}
+      <div
+        className="absolute right-[52px] top-[107px] flex items-center justify-center px-[4px] py-[2px] opacity-60"
+        style={{ border: '1px solid #27c3cc' }}
+      >
+        <span
+          className="text-[14px] font-medium uppercase"
+          style={{ fontFamily: FONT_OXANIUM, color: '#27c3cc' }}
+        >
           88,4 W
         </span>
       </div>
 
-      {/* Left column labels */}
-      <div className="absolute left-[52px] top-[149px] flex flex-col gap-3 opacity-70">
+      {/* Figma node 1697:32772 — Left column labels
+           Exact: left-[52px] top-[149px] gap-[12px] opacity-70
+           Font: Oxanium Medium 15px #27c3cc uppercase */}
+      <div className="absolute left-[52px] top-[149px] flex flex-col gap-[12px] opacity-70">
         {TELEMETRY_LEFT.map((label, i) => (
           <Motion.p
             key={label}
             className="text-[15px] font-medium uppercase"
-            style={{ fontFamily: FONT_OXANIUM, color: CYAN }}
+            style={{ fontFamily: FONT_OXANIUM, color: '#27c3cc' }}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: isRevealed ? 1 : 0, x: isRevealed ? 0 : -8 }}
             transition={{ duration: 0.3, delay: scanPhase === 'complete' ? 0.05 * i : 0 }}
@@ -618,19 +1063,27 @@ function TelemetryLabels({ scanPhase }) {
         ))}
       </div>
 
-      {/* Right column values */}
-      <div className="absolute right-[52px] top-[149px] flex flex-col gap-3 items-end opacity-70 w-[62px]">
+      {/* Right column values — layout fix: anchored from RIGHT edge to prevent
+           overflow clipping. Flex row [line][text] ensures text sits BESIDE the
+           line, never overlapping. right-[52px] keeps content inside the viewport
+           boundary (40px ruler + 12px gap from right edge). */}
+      <div className="absolute right-[52px] top-[149px] flex flex-col gap-[12px] opacity-70">
         {TELEMETRY_RIGHT.map((val, i) => (
-          <Motion.p
+          <Motion.div
             key={i}
-            className="text-[15px] font-medium uppercase text-right w-full"
-            style={{ fontFamily: FONT_OXANIUM, color: CYAN }}
+            className="flex items-center gap-[8px]"
             initial={{ opacity: 0, x: 8 }}
             animate={{ opacity: isRevealed ? 1 : 0, x: isRevealed ? 0 : 8 }}
             transition={{ duration: 0.3, delay: scanPhase === 'complete' ? 0.05 * i : 0 }}
           >
-            {val}
-          </Motion.p>
+            <div className="w-[16px] h-[1px] shrink-0" style={{ backgroundColor: 'rgba(39,195,204,0.4)' }} />
+            <span
+              className="text-[15px] font-medium uppercase whitespace-nowrap"
+              style={{ fontFamily: FONT_OXANIUM, color: '#27c3cc' }}
+            >
+              {val}
+            </span>
+          </Motion.div>
         ))}
       </div>
     </>
@@ -717,87 +1170,62 @@ function ShuttleViewport({
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// COMPONENT: Footer system bar — Figma bottom status strip
+// COMPONENT: Footer — Figma node 1696:23779
 //
-// Structure (matching Figma):
-//   ┌─────────────────────────────────────────────────────────┐
-//   │ [glow line across top]                                   │
-//   │ B312    ┃ ▮▮▮▮ ┃   AN-12     ┃ ▮▮ ┃                    │
-//   └─────────────────────────────────────────────────────────┘
-//
-// - Thin glowing cyan line at top edge
-// - Slightly darker background band
-// - "B312" left, "AN-12" after first segment
-// - Small decorative bar segments between labels
+// Exact Figma structure:
+//   px-[52px] py-[24px], flex items-end
+//   Inner flex (1696:23795): gap-[12px], flex-1 children
+//     1. "b312" column: text 18px Oxanium Medium white + 6px bar rgba(39,195,204,0.3)
+//     2. Spacer bar: 6px tall, rgba(39,195,204,0.09)
+//     3. "an-12" column: text 18px Oxanium Medium white + 6px bar rgba(39,195,204,0.3)
+//     4-8. Five 3px bars: rgba(39,195,204,0.09)
 // ═══════════════════════════════════════════════════════════════════════════════
 function BottomBar() {
   return (
     <Motion.div
-      className="relative px-[32px] py-[10px]"
-      style={{ fontFamily: FONT_MONO }}
+      // Figma: px-[52px] py-[24px], items-end
+      className="relative flex items-end px-[52px] py-[24px]"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6, delay: 0.5 }}
     >
-      {/* Top edge — glowing cyan system line */}
-      <div
-        className="absolute top-0 inset-x-0 h-[1px]"
-        style={{
-          background: `linear-gradient(90deg, ${CYAN}, rgba(39,195,204,0.4) 30%, rgba(39,195,204,0.15) 70%, transparent)`,
-        }}
-      />
-      {/* Subtle glow beneath the line */}
-      <div
-        className="absolute top-[1px] inset-x-0 h-[3px]"
-        style={{
-          background: `linear-gradient(90deg, rgba(39,195,204,0.08), transparent 50%)`,
-        }}
-      />
+      {/* Figma node 1696:23795 — inner flex container
+           gap-[12px], flex-1 children, items-end */}
+      <div className="flex flex-1 gap-[12px] items-end">
 
-      {/* Bar content — labels + decorative segments */}
-      <div className="flex items-center gap-[16px]">
-        {/* B312 label */}
-        <span className="text-[13px] font-medium tracking-[0.08em] opacity-50" style={{ color: WHITE }}>
-          B312
-        </span>
-
-        {/* Decorative segment bars — small progress-like bars */}
-        <div className="flex items-center gap-[3px]">
-          {[16, 10, 6, 12].map((w, i) => (
-            <div
-              key={i}
-              className="h-[3px] rounded-[1px]"
-              style={{
-                width: w,
-                backgroundColor: CYAN,
-                opacity: 0.15 - i * 0.02,
-              }}
-            />
-          ))}
+        {/* Figma node 1696:23775 — "B312" column */}
+        <div className="flex flex-col gap-[4px] items-start flex-1">
+          <p
+            className="text-[18px] font-medium uppercase w-full"
+            style={{ fontFamily: FONT_OXANIUM, color: WHITE }}
+          >
+            B312
+          </p>
+          {/* Figma node 1696:23770 — accent bar: 6px, rgba(39,195,204,0.3) */}
+          <div className="w-full h-[6px]" style={{ backgroundColor: 'rgba(39,195,204,0.3)' }} />
         </div>
 
-        {/* Vertical divider */}
-        <div className="w-[1px] h-[12px] opacity-10" style={{ backgroundColor: CYAN }} />
+        {/* Figma node 1696:23771 — spacer bar: 6px, rgba(39,195,204,0.09) */}
+        <div className="flex-1 h-[6px]" style={{ backgroundColor: 'rgba(39,195,204,0.09)' }} />
 
-        {/* AN-12 label */}
-        <span className="text-[13px] font-medium tracking-[0.08em] opacity-50" style={{ color: WHITE }}>
-          AN-12
-        </span>
-
-        {/* More decorative segments */}
-        <div className="flex items-center gap-[3px]">
-          {[8, 14, 5, 10, 7].map((w, i) => (
-            <div
-              key={i}
-              className="h-[3px] rounded-[1px]"
-              style={{
-                width: w,
-                backgroundColor: CYAN,
-                opacity: 0.1 - i * 0.015,
-              }}
-            />
-          ))}
+        {/* Figma node 1696:23776 — "AN-12" column */}
+        <div className="flex flex-col gap-[4px] items-start flex-1">
+          <p
+            className="text-[18px] font-medium uppercase w-full"
+            style={{ fontFamily: FONT_OXANIUM, color: WHITE }}
+          >
+            AN-12
+          </p>
+          {/* Figma node 1696:23778 — accent bar: 6px, rgba(39,195,204,0.3) */}
+          <div className="w-full h-[6px]" style={{ backgroundColor: 'rgba(39,195,204,0.3)' }} />
         </div>
+
+        {/* Figma nodes 1696:23788–23792 — five trailing 3px segment bars */}
+        <div className="flex-1 h-[3px]" style={{ backgroundColor: 'rgba(39,195,204,0.09)' }} />
+        <div className="flex-1 h-[3px]" style={{ backgroundColor: 'rgba(39,195,204,0.09)' }} />
+        <div className="flex-1 h-[3px]" style={{ backgroundColor: 'rgba(39,195,204,0.09)' }} />
+        <div className="flex-1 h-[3px]" style={{ backgroundColor: 'rgba(39,195,204,0.09)' }} />
+        <div className="flex-1 h-[3px]" style={{ backgroundColor: 'rgba(39,195,204,0.09)' }} />
       </div>
     </Motion.div>
   )
@@ -807,52 +1235,50 @@ function BottomBar() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE: SpacecraftFUIPage
 //
-// State machine:
-//   idle → scanning → complete → idle (reset after delay)
+// Two view modes controlled by activeMenuIndex:
+//   - Index 0 (default): Scan Shuttle view (rocket + scan interaction)
+//   - Index 2: Fuel System view (jerry can + drag/fill interaction)
 //
-// Scan sequence:
-//   1. IDLE: shuttle floats, data visible, button ready
-//   2. TRIGGER: click → UI dims, looping scan starts
-//   3. SCAN LOOP: line sweeps top↔bottom rapidly (~1s/pass, 5 passes)
-//   4. ACTIVE FEEDBACK: grid, pulsing dots, brightness overlay
-//   5. COMPLETION (5s): flash, button → "SCANNED ✓", auto-reset
+// Scan state machine (shuttle mode):
+//   idle → scanning → complete → idle (reset after delay)
 // ═══════════════════════════════════════════════════════════════════════════════
 export function SpacecraftFUIPage() {
   const navigate = useNavigate()
   const [activeMenuIndex, setActiveMenuIndex] = useState(0)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
-  // ─── Scan state machine ─────────────────────────────────────────────────
-  const [scanPhase, setScanPhase] = useState('idle') // idle | scanning | complete
+  // ─── Scan state machine (shuttle mode) ──────────────────────────────────
+  const [scanPhase, setScanPhase] = useState('idle')
   const isScanning = scanPhase === 'scanning'
-  const isComplete = scanPhase === 'complete'
+  const isScanComplete = scanPhase === 'complete'
   const [showFlash, setShowFlash] = useState(false)
 
-  // Timeout refs for cleanup
   const scanTimerRef = useRef(null)
   const resetTimerRef = useRef(null)
 
   const handleScan = useCallback(() => {
     if (scanPhase !== 'idle') return
-
-    // Phase 2: TRIGGER — start looping scan
     setScanPhase('scanning')
 
-    // ── Scan loop logic ──
-    // Scan line loops autonomously via Framer Motion (repeat: Infinity).
-    // After exactly 5 seconds, we stop scanning and trigger completion.
     scanTimerRef.current = setTimeout(() => {
-      // Phase 5: COMPLETION
       setShowFlash(true)
       setScanPhase('complete')
-
       setTimeout(() => setShowFlash(false), 600)
-
-      // Auto-reset after 3 seconds
-      resetTimerRef.current = setTimeout(() => {
-        setScanPhase('idle')
-      }, 3000)
+      resetTimerRef.current = setTimeout(() => setScanPhase('idle'), 3000)
     }, 5000)
   }, [scanPhase])
+
+  // ─── Fuel System state (fuel mode, activeMenuIndex === 2) ───────────────
+  const [fuelLevel, setFuelLevel] = useState(42)
+  const [isFilling, setIsFilling] = useState(false)
+  const isFuelComplete = fuelLevel >= 100
+
+  const handleAddFuel = useCallback(() => {
+    if (isFilling || isFuelComplete) return
+    setIsFilling(true)
+    setFuelLevel(100)
+    setTimeout(() => setIsFilling(false), 1600)
+  }, [isFilling, isFuelComplete])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -862,6 +1288,9 @@ export function SpacecraftFUIPage() {
     }
   }, [])
 
+  // activeMenu === "fuel-system" when menu index 2 is selected
+  const isFuelSystemMode = activeMenuIndex === 2
+
   return (
     <div
       className="fixed inset-0 flex flex-col overflow-hidden"
@@ -869,20 +1298,14 @@ export function SpacecraftFUIPage() {
     >
       <DotGrid />
 
-      {/* ── Page max-width constraint ──
-           Figma frame is 1200×960. Constraining to 1100px max-width
-           prevents the layout from feeling too wide on large monitors.
-           Centered with mx-auto. */}
       <div className="w-full max-w-[1100px] mx-auto flex flex-col flex-1 min-h-0">
 
-        {/* Header */}
-        <Header onBack={() => navigate('/')} />
+        {/* Header — shared across all modes */}
+        <Header onBack={() => navigate('/')} onSettings={() => setIsSettingsOpen(true)} />
 
-        {/* ── Top spacing: header → body ──
-             Figma shows ~32px gap between header bottom and content top */}
-        <div className="flex-1 flex min-h-0 px-[32px] gap-[32px] mt-[32px]">
+        <div className="flex-1 flex min-h-0 px-[52px] gap-[32px] mt-[24px]">
 
-          {/* Left sidebar — menu (Figma: 440px width) */}
+          {/* Left sidebar — navigation (shared, always visible) */}
           <Motion.div
             className="w-[440px] shrink-0 flex flex-col"
             initial={{ opacity: 0 }}
@@ -895,50 +1318,62 @@ export function SpacecraftFUIPage() {
             />
           </Motion.div>
 
-          {/* Right content — shuttle viewport
-               Increased max-width to 700px to better fill the available space
-               and match Figma proportions (shuttle area ~611px + label margins). */}
-          <Motion.div
-            className="flex-1 flex flex-col items-center gap-[20px] min-w-0 max-w-[700px]"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{
-              opacity: isScanning ? 0.92 : 1,
-              scale: 1,
-            }}
-            transition={{ duration: 0.5, delay: 0.15, ease: EASE_OUT }}
-          >
-            {/* Orbit / Mission header row — Figma: 18px Oxanium Medium */}
-            <div
-              className="flex items-center justify-between w-full"
-              style={{ fontFamily: FONT_OXANIUM }}
-            >
-              <span className="text-[18px] font-medium uppercase" style={{ color: WHITE }}>
-                ORBIT: LEO TRANSFER
-              </span>
-              <span className="text-[18px] font-medium uppercase text-right" style={{ color: WHITE }}>
-                MISSION ID: B01-ARTEMIS
-              </span>
-            </div>
+          {/* Right content — switches between Shuttle and Fuel System views */}
+          <AnimatePresence mode="wait">
+            {isFuelSystemMode ? (
+              <FuelSystemView
+                key="fuel-system"
+                fuelLevel={fuelLevel}
+                isFilling={isFilling}
+                isComplete={isFuelComplete}
+                onAddFuel={handleAddFuel}
+              />
+            ) : (
+              <Motion.div
+                key="shuttle"
+                className="flex-1 flex flex-col items-center gap-[20px] min-w-0 max-w-[700px]"
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{
+                  opacity: isScanning ? 0.92 : 1,
+                  scale: 1,
+                }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={{ duration: 0.5, delay: 0.15, ease: EASE_OUT }}
+              >
+                <div
+                  className="flex items-center justify-between w-full"
+                  style={{ fontFamily: FONT_OXANIUM }}
+                >
+                  <span className="text-[18px] font-medium uppercase" style={{ color: WHITE }}>
+                    ORBIT: LEO TRANSFER
+                  </span>
+                  <span className="text-[18px] font-medium uppercase text-right" style={{ color: WHITE }}>
+                    MISSION ID: B01-ARTEMIS
+                  </span>
+                </div>
 
-            {/* Shuttle viewport */}
-            <ShuttleViewport
-              isScanning={isScanning}
-              scanPhase={scanPhase}
-              showFlash={showFlash}
-            />
+                <ShuttleViewport
+                  isScanning={isScanning}
+                  scanPhase={scanPhase}
+                  showFlash={showFlash}
+                />
 
-            {/* Scan button — centered below viewport */}
-            <ScanButton
-              isScanning={isScanning}
-              isComplete={isComplete}
-              onClick={handleScan}
-            />
-          </Motion.div>
+                <ScanButton
+                  isScanning={isScanning}
+                  isComplete={isScanComplete}
+                  onClick={handleScan}
+                />
+              </Motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Bottom bar */}
+        {/* Bottom bar — shared across all modes */}
         <BottomBar />
       </div>
+
+      {/* Settings modal — triggered by header settings button */}
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   )
 }
