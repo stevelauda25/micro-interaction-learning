@@ -8,7 +8,8 @@
       "Bash(rm -rf _scaffold)",
       "Bash(npm install:*)",
       "Bash(npm run:*)",
-      "mcp__figma__get_design_context"
+      "mcp__figma__get_design_context",
+      "Bash(node -e ':*)"
     ],
     "additionalDirectories": [
       "d:\\Blissful\\Design Engineering\\micro-interaction-learning\\src\\assets"

@@ -26,6 +26,12 @@ const PAGES = [
     description: 'Sci-fi control panel with glitch save effect, CRT popup close, progress bars, and layered interactions.',
     status: 'done',
   },
+  {
+    path: '/spacecraft-fui',
+    title: 'Spacecraft FUI',
+    description: 'Cinematic spacecraft interface with 6-phase scan animation, scan line sweep, brightness reveal, and data feedback.',
+    status: 'done',
+  },
 ]
 
 const STATUS_STYLES = {

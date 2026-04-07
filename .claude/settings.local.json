@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "WebFetch(domain:www.figma.com)",
+      "Bash(node -e ':*)"
+    ]
+  }
+}
