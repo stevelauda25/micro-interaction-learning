@@ -1094,49 +1094,387 @@ function TelemetryLabels({ scanPhase }) {
 // 6. Blinking analysis dots
 // 7. Completion flash
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// Nozzle offset from rocket center (SVG geometry):
+// Left nozzle x=128, Right x=195, Center x=161.5 → offset = 33.5px symmetric
+const NOZZLE_OFFSET_X = 33.5
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: NozzleFlame — small rounded flame at one nozzle opening
+//
+// Compact, rounded-bottom flame with orange→yellow→white gradient.
+// Left and right flames have slightly offset animation timing so they
+// feel independent and organic (like two separate engines, not one).
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: NozzleFlame — single flame element (no positioning, parent handles layout)
+//
+// Renders the animated teardrop flame SVG with gradient.
+// Position is controlled by the flex container in RocketFlame, not by this component.
+// ═══════════════════════════════════════════════════════════════════════════════
+// Two flame states:
+// - idle: small, subtle pilot flame — gentle flicker, low opacity, barely visible
+// - launching (anticipation/ignition/launch): progressively bigger and more dynamic
+function NozzleFlame({ launchPhase, side }) {
+  const isIdle = launchPhase === 'idle' || launchPhase === 'fadeUI' || launchPhase === 'done'
+  const isThrusting = launchPhase === 'launch'
+  const isIgnition = launchPhase === 'ignition'
+  const isBuilding = launchPhase === 'anticipation'
+
+  const gradId = `nozzleGrad_${side}`
+  const coreId = `nozzleCore_${side}`
+  const delayOffset = side === 'right' ? 0.08 : 0
+
+  // Idle flame: engine is ON — stable, clearly visible, but calmer than launch.
+  // Size is close to anticipation baseline so the transition feels natural.
+  const opacityVal = isIdle
+    ? [0.55, 0.7, 0.6]         // idle: bright enough to read as "engine running"
+    : isBuilding
+      ? [0.6, 0.85, 0.65]      // anticipation: intensifying
+      : [0.85, 1, 0.9]         // ignition/launch: full intensity
+
+  const scaleYVal = isThrusting
+    ? [1, 1.3, 1.05, 1.25]     // launch: large dynamic pulse
+    : isIgnition
+      ? [0.8, 1.1, 0.85]       // ignition: strong
+      : isBuilding
+        ? [0.4, 0.55, 0.45]    // anticipation: growing
+        : [0.4, 0.5, 0.45]     // idle: substantial — engine clearly on
+
+  const scaleXVal = isThrusting
+    ? [0.9, 1.05, 0.92]
+    : isIgnition
+      ? [0.75, 0.9, 0.78]
+      : isBuilding
+        ? [0.5, 0.65, 0.55]
+        : [0.7, 0.8, 0.75]     // idle: wide, stable presence
+
+  // Idle breathes slowly (2.5s), launch phases pulse faster
+  const duration = isThrusting ? 0.3 : isIgnition ? 0.45 : isBuilding ? 0.6 : 2.5
+
+  return (
+    <Motion.div
+      key={`nozzle_flame_${side}`}
+      className={`${side}-nozzle pointer-events-none`}
+      style={{
+        width: 44,
+        height: 60,
+        transformOrigin: 'top center',
+      }}
+      // Initial matches idle resting state — engine reads as ON from first frame.
+      initial={{ opacity: 0.55, scaleY: 0.4, scaleX: 0.7 }}
+      animate={{
+        opacity: opacityVal,
+        scaleY: scaleYVal,
+        scaleX: scaleXVal,
+      }}
+      transition={{
+        duration,
+        delay: delayOffset,
+        repeat: Infinity,
+        repeatType: 'mirror',
+        ease: 'easeInOut',
+      }}
+    >
+      <svg viewBox="0 0 44 60" fill="none" className="w-full h-full">
+        <defs>
+          <radialGradient id={gradId} cx="50%" cy="25%" r="55%">
+            <stop offset="0%" stopColor="#FFE066" stopOpacity="0.95" />
+            <stop offset="35%" stopColor="#FFB84D" stopOpacity="0.8" />
+            <stop offset="70%" stopColor="#FF6B1A" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#FF3300" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id={coreId} cx="50%" cy="20%" r="30%">
+            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
+            <stop offset="60%" stopColor="#FFE066" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#FFB84D" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="22" cy="18" rx="20" ry="28" fill={`url(#${gradId})`} />
+        <ellipse cx="22" cy="14" rx="9" ry="16" fill={`url(#${coreId})`} />
+      </svg>
+    </Motion.div>
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: ExhaustTrail — Duolingo-style wavy trailing exhaust
+//
+// Creates layered organic blobs that flow downward with wavy skew motion.
+// 3 layers with staggered size, delay, and opacity create depth and life.
+//
+// Each layer animates:
+//   - scaleY: breathes vertically (1 → 1.4 → 1)
+//   - skewX: sways left/right (0° → 3° → -3° → 0°) for organic waviness
+//   - translateY: drifts downward (0 → 20px) simulating exhaust flow
+//   - opacity: flickers softly (0.7 → 1 → 0.6)
+//
+// The combination of these on offset timings gives a flowing,
+// alive feel — playful but controlled, like Duolingo animations.
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: ExhaustTrail — wavy trailing blobs below one nozzle
+//
+// No absolute positioning — parent flex container handles side-by-side layout.
+// Each trail is a stack of 3 blurred layers with staggered animation.
+// ═══════════════════════════════════════════════════════════════════════════════
+function ExhaustTrail({ launchPhase, side }) {
+  const isVisible = launchPhase === 'ignition' || launchPhase === 'launch'
+  const isThrusting = launchPhase === 'launch'
+
+  const layers = [
+    { width: 36, height: 90, delay: 0, opacity: [0.6, 0.85, 0.55], blur: 4 },
+    { width: 50, height: 130, delay: 0.12, opacity: [0.35, 0.55, 0.3], blur: 8 },
+    { width: 64, height: 170, delay: 0.25, opacity: [0.15, 0.3, 0.12], blur: 14 },
+  ]
+
+  return (
+    <AnimatePresence>
+      {isVisible && (
+        <div
+          key={`trail_container_${side}`}
+          className={`${side}-nozzle-trail pointer-events-none relative`}
+          style={{ width: 64, marginTop: 4 }}
+        >
+          {layers.map((layer, i) => (
+            <Motion.div
+              key={`trail_${side}_${i}`}
+              className="absolute pointer-events-none"
+              style={{
+                width: layer.width,
+                height: layer.height,
+                left: '50%',
+                top: i * 10,
+                transform: `translateX(-50%)`,
+                transformOrigin: 'top center',
+                filter: `blur(${layer.blur}px)`,
+              }}
+              initial={{ opacity: 0, scaleY: 0.2 }}
+              animate={{
+                scaleY: isThrusting ? [1, 1.4, 1.1, 1.35] : [0.6, 0.9, 0.65],
+                skewX: isThrusting
+                  ? [0, 3, -3, 2, -2, 0]
+                  : [0, 1.5, -1.5, 0],
+                y: isThrusting ? [0, 20, 5, 18] : [0, 10, 2],
+                opacity: layer.opacity,
+              }}
+              exit={{ opacity: 0, scaleY: 0, transition: { duration: 0.3 } }}
+              transition={{
+                duration: isThrusting ? 1.2 : 1.5,
+                delay: layer.delay,
+                repeat: Infinity,
+                repeatType: 'mirror',
+                ease: 'easeInOut',
+              }}
+            >
+              <svg
+                viewBox={`0 0 ${layer.width} ${layer.height}`}
+                fill="none"
+                className="w-full h-full"
+              >
+                <defs>
+                  <radialGradient id={`trail_${side}_${i}`} cx="50%" cy="20%" r="60%">
+                    <stop offset="0%" stopColor="#FF8C42" stopOpacity="0.7" />
+                    <stop offset="50%" stopColor="#FF6B1A" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#CC3300" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <ellipse
+                  cx={layer.width / 2}
+                  cy={layer.height * 0.35}
+                  rx={layer.width / 2 - 2}
+                  ry={layer.height * 0.45}
+                  fill={`url(#trail_${side}_${i})`}
+                />
+              </svg>
+            </Motion.div>
+          ))}
+        </div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT: RocketFlame — dual flames placed side-by-side using flex layout
+//
+// Fix: flames are in a flex row with explicit gap to force separation.
+// This guarantees both left and right flames are always visible and never
+// overlap each other. The container is centered below the rocket.
+// ═══════════════════════════════════════════════════════════════════════════════
+function RocketFlame({ launchPhase }) {
+  // Always visible — idle shows small pilot flames, launch phases grow them
+  const isLaunching = launchPhase === 'anticipation' || launchPhase === 'ignition' || launchPhase === 'launch'
+
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        // Flame pushed further down for deeper separation from nozzle.
+        bottom: -50,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        gap: 12,
+        zIndex: 20,
+      }}
+    >
+      {/* LEFT nozzle — inner glow + flame + trail
+           Glow has two states:
+           - idle: very dim (0.1 opacity), barely perceptible warmth
+           - launching: bright pulsing (0.5–0.9 opacity) */}
+      <div className="left-nozzle flex flex-col items-center relative">
+        <Motion.div
+          className="pointer-events-none"
+          style={{
+            width: 36,
+            height: 24,
+            marginBottom: -10,
+            background: 'radial-gradient(ellipse at 50% 100%, rgba(255,180,77,0.5) 0%, rgba(255,120,30,0.2) 50%, transparent 100%)',
+            filter: 'blur(6px)',
+          }}
+          animate={{
+            opacity: isLaunching ? [0.5, 0.9, 0.6, 0.85] : [0.12, 0.2, 0.14],
+          }}
+          transition={{ duration: isLaunching ? 0.5 : 2, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
+        />
+        <NozzleFlame key="flame_left" launchPhase={launchPhase} side="left" />
+        <ExhaustTrail key="trail_left" launchPhase={launchPhase} side="left" />
+      </div>
+
+      {/* RIGHT nozzle — inner glow + flame + trail */}
+      <div className="right-nozzle flex flex-col items-center relative">
+        <Motion.div
+          className="pointer-events-none"
+          style={{
+            width: 36,
+            height: 24,
+            marginBottom: -10,
+            background: 'radial-gradient(ellipse at 50% 100%, rgba(255,180,77,0.5) 0%, rgba(255,120,30,0.2) 50%, transparent 100%)',
+            filter: 'blur(6px)',
+          }}
+          animate={{
+            opacity: isLaunching ? [0.5, 0.9, 0.6, 0.85] : [0.12, 0.2, 0.14],
+          }}
+          transition={{ duration: isLaunching ? 0.5 : 2, delay: 0.08, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
+        />
+        <NozzleFlame key="flame_right" launchPhase={launchPhase} side="right" />
+        <ExhaustTrail key="trail_right" launchPhase={launchPhase} side="right" />
+      </div>
+    </div>
+  )
+}
+
+
 function ShuttleViewport({
   isScanning,
   scanPhase,
   showFlash,
+  launchPhase,
 }) {
+  // During launch, surrounding UI elements fade out
+  const isLaunchActive = launchPhase === 'fadeUI' || launchPhase === 'anticipation'
+    || launchPhase === 'ignition' || launchPhase === 'launch' || launchPhase === 'done'
+
   return (
     <div className="relative w-full h-[650px] overflow-hidden">
-      {/* Top arc decoration — outer */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-0 w-[507px] h-[95px]">
-        <img src={topArcSvg} alt="" className="w-full h-full" />
-      </div>
-      {/* Top arc decoration — inner with ticks (60% opacity)
-           SVG path and ticks extracted directly from Figma MCP */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-[5px] w-[507px] h-[80px] opacity-60">
-        <img src={topArcInnerSvg} alt="" className="w-full h-full" />
-      </div>
-
-      {/* Left ruler */}
-      <div className="absolute left-0 top-0 w-[40px] h-[650px]">
-        <img src={rulerLeftSvg} alt="" className="w-full h-full" />
-      </div>
-      {/* Right ruler */}
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[40px] h-[650px]">
-        <img src={rulerRightSvg} alt="" className="w-full h-full" />
-      </div>
+      {/* ─── Surrounding UI: arc, rulers, labels ───
+           Fade out during launch sequence (Step 1) */}
+      <Motion.div
+        animate={{
+          opacity: isLaunchActive ? 0 : 1,
+          y: isLaunchActive ? 10 : 0,
+        }}
+        transition={{ duration: 0.8, ease: EASE_OUT }}
+      >
+        {/* Top arc decoration — outer */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-0 w-[507px] h-[95px]">
+          <img src={topArcSvg} alt="" className="w-full h-full" />
+        </div>
+        {/* Top arc decoration — inner with ticks (60% opacity) */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-[5px] w-[507px] h-[80px] opacity-60">
+          <img src={topArcInnerSvg} alt="" className="w-full h-full" />
+        </div>
+        {/* Left ruler */}
+        <div className="absolute left-0 top-0 w-[40px] h-[650px]">
+          <img src={rulerLeftSvg} alt="" className="w-full h-full" />
+        </div>
+        {/* Right ruler */}
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[40px] h-[650px]">
+          <img src={rulerRightSvg} alt="" className="w-full h-full" />
+        </div>
+        {/* Telemetry labels */}
+        <TelemetryLabels scanPhase={scanPhase} />
+      </Motion.div>
 
       {/* ─── Rocket container ─── */}
       <div className="absolute left-1/2 -translate-x-1/2 top-[27px] w-[323px] h-[560px]">
-        {/* Phase 1: Idle floating animation */}
+        {/* Launch animation sequence — intentionally slow & heavy:
+             - idle: gentle float (y ±4px, 3s loop)
+             - anticipation: SLOW dip DOWN 8px over 1.5s — engine struggling
+               against gravity. Micro-shake via x oscillation gives tense,
+               mechanical vibration feel. This is where the audience feels WEIGHT.
+             - ignition: hold at max compression — the pause before release
+             - launch: rocket releases upward at -120vh over 1.5s — heavy but
+               powerful, like real mass being pushed through atmosphere
+             - done: offscreen */}
         <Motion.div
           className="relative w-full h-full"
           animate={
-            !isScanning
-              ? { y: [0, -4, 0] }
-              : { y: 0 }
+            launchPhase === 'launch'
+              ? { y: '-120vh', x: 0 }
+              : launchPhase === 'ignition'
+                ? {
+                    // Hold at max compression, shake intensifies before release
+                    y: 8,
+                    x: [0, 1.5, -1.5, 1, -1, 0.5, -0.5, 0],
+                  }
+                : launchPhase === 'anticipation'
+                  ? {
+                      // Slow compression DOWN — engine fighting gravity.
+                      // Micro-shake: x oscillates ±1px, looping slowly.
+                      // The combination of downward dip + lateral vibration
+                      // creates the "struggling engine" feel.
+                      y: 8,
+                      x: [0, 0.8, -0.8, 0.6, -0.6, 0],
+                    }
+                  : !isScanning
+                    ? { y: [0, -4, 0], x: 0 }
+                    : { y: 0, x: 0 }
           }
           transition={
-            !isScanning
-              ? { duration: 3, repeat: Infinity, ease: 'easeInOut' }
-              : { duration: 0.3 }
+            launchPhase === 'launch'
+              ? {
+                  // Main launch thrust — 2.5s sells the WEIGHT of a real rocket.
+                  // Easing [0.16, 1, 0.3, 1]: very slow start (fighting gravity),
+                  // then smooth acceleration as thrust overcomes mass.
+                  // The first ~0.8s barely moves — that's the "heavy release" feel.
+                  duration: 2.5,
+                  ease: [0.16, 1, 0.3, 1],
+                }
+              : launchPhase === 'ignition'
+                ? {
+                    // Intensified shake at ignition — engine at full power
+                    y: { duration: 0.3, ease: 'easeOut' },
+                    x: { duration: 0.6, repeat: Infinity, ease: 'linear' },
+                  }
+                : launchPhase === 'anticipation'
+                  ? {
+                      // SLOW compression — 1.5s to reach max dip.
+                      // This duration is the key to the "pressure build" feel.
+                      // Shorter = snappy (wrong). Longer = tense (right).
+                      y: { duration: 1.5, ease: [0.4, 0, 0.2, 1] },
+                      x: { duration: 0.8, repeat: Infinity, ease: 'linear' },
+                    }
+                  : !isScanning
+                    ? { duration: 3, repeat: Infinity, ease: 'easeInOut' }
+                    : { duration: 0.3 }
           }
         >
-          {/* Rocket SVG — from Figma (inline, paths preserved) */}
+          {/* Rocket SVG */}
           <img
             src={rocketSvg}
             alt="Space shuttle Artemis"
@@ -1147,15 +1485,15 @@ function ShuttleViewport({
             }}
           />
 
-          {/* Scan effects — grid, dots, looping scan line */}
+          {/* Flame / exhaust — appears during ignition + launch phases */}
+          <RocketFlame launchPhase={launchPhase} />
+
+          {/* Scan effects */}
           <ScanOverlay isScanning={isScanning} />
           <ScanLine isScanning={isScanning} />
           <CompletionFlash trigger={showFlash} />
         </Motion.div>
       </div>
-
-      {/* Telemetry labels */}
-      <TelemetryLabels scanPhase={scanPhase} />
     </div>
   )
 }
@@ -1260,6 +1598,55 @@ export function SpacecraftFUIPage() {
     }, 5000)
   }, [scanPhase])
 
+  // ─── Launch state machine ────────────────────────────────────────────────
+  // Phases: idle → fadeUI → anticipation → ignition → launch → done → idle
+  //
+  // The BUILDUP is intentionally very slow (2.5s total before launch).
+  // This creates the feeling of an engine STRUGGLING against gravity,
+  // building pressure like a coiled spring, then RELEASING.
+  //
+  // Timeline:
+  //   0ms:    fadeUI        — UI fades out slowly (800ms)
+  //   600ms:  anticipation  — rocket dips DOWN 8px, micro-shake begins (2000ms)
+  //                           flame starts small during this phase
+  //                           WHY so slow: this IS the tension — the audience
+  //                           needs to feel the weight, the struggle, the power
+  //                           building before release
+  //   2600ms: ignition      — flame grows large, final dramatic hold (800ms)
+  //                           WHY delayed: the pause after max pressure and
+  //                           before release is what makes the launch feel powerful
+  //   3400ms: launch        — rocket releases upward -120vh (2500ms)
+  //                           WHY 2.5s: heavy objects accelerate slowly.
+  //                           The first ~0.8s barely moves (fighting gravity),
+  //                           then smooth acceleration as thrust overcomes mass.
+  //   5900ms: done          — rocket offscreen, clean
+  //   7500ms: idle          — reset everything
+  const [launchPhase, setLaunchPhase] = useState('idle')
+
+  const handleLaunch = useCallback(() => {
+    if (launchPhase !== 'idle' || scanPhase !== 'idle') return
+
+    // Step 1: UI fades out — slow dissolve sets cinematic mood
+    setLaunchPhase('fadeUI')
+
+    // Step 2: Anticipation — the CORE of the experience.
+    // Rocket compresses down, engine shakes, flame sputters to life.
+    // This 2-second hold is what creates the "ngeden" / pressure-build feel.
+    setTimeout(() => setLaunchPhase('anticipation'), 600)
+
+    // Step 3: Ignition — flame flares to full power, final breath before release
+    setTimeout(() => setLaunchPhase('ignition'), 2600)
+
+    // Step 4: LAUNCH — the payoff. All that built tension releases upward.
+    setTimeout(() => setLaunchPhase('launch'), 3400)
+
+    // Step 5: Done — rocket has exited the screen (3400 + 2500 = 5900ms)
+    setTimeout(() => setLaunchPhase('done'), 5900)
+
+    // Step 6: Reset — back to idle after a pause
+    setTimeout(() => setLaunchPhase('idle'), 7500)
+  }, [launchPhase, scanPhase])
+
   // ─── Fuel System state (fuel mode, activeMenuIndex === 2) ───────────────
   const [fuelLevel, setFuelLevel] = useState(42)
   const [isFilling, setIsFilling] = useState(false)
@@ -1328,13 +1715,30 @@ export function SpacecraftFUIPage() {
                 animate={{
                   opacity: isScanning ? 0.92 : 1,
                   scale: 1,
+                  // Screen shake during launch — stronger burst as rocket releases.
+                  // The shake during anticipation is handled by the rocket itself
+                  // (micro-oscillation on the rocket container). This is the
+                  // whole-view shake that sells the force of the launch.
+                  x: launchPhase === 'launch'
+                    ? [0, 3, -3, 2, -2, 1, -1, 0]
+                    : 0,
                 }}
                 exit={{ opacity: 0, scale: 0.97 }}
-                transition={{ duration: 0.5, delay: 0.15, ease: EASE_OUT }}
+                transition={{
+                  duration: 0.5,
+                  delay: 0.15,
+                  ease: EASE_OUT,
+                  x: { duration: 0.5, ease: 'easeOut' },
+                }}
               >
-                <div
+                <Motion.div
                   className="flex items-center justify-between w-full"
                   style={{ fontFamily: FONT_OXANIUM }}
+                  animate={{
+                    opacity: launchPhase !== 'idle' ? 0 : 1,
+                    y: launchPhase !== 'idle' ? 10 : 0,
+                  }}
+                  transition={{ duration: 0.4, ease: EASE_OUT }}
                 >
                   <span className="text-[18px] font-medium uppercase" style={{ color: WHITE }}>
                     ORBIT: LEO TRANSFER
@@ -1342,19 +1746,56 @@ export function SpacecraftFUIPage() {
                   <span className="text-[18px] font-medium uppercase text-right" style={{ color: WHITE }}>
                     MISSION ID: B01-ARTEMIS
                   </span>
-                </div>
+                </Motion.div>
 
                 <ShuttleViewport
                   isScanning={isScanning}
                   scanPhase={scanPhase}
                   showFlash={showFlash}
+                  launchPhase={launchPhase}
                 />
 
-                <ScanButton
-                  isScanning={isScanning}
-                  isComplete={isScanComplete}
-                  onClick={handleScan}
-                />
+                {/* Button row — Scan Shuttle + Launch side by side */}
+                <Motion.div
+                  className="flex items-center gap-[12px]"
+                  animate={{
+                    opacity: launchPhase !== 'idle' ? 0 : 1,
+                    y: launchPhase !== 'idle' ? 10 : 0,
+                  }}
+                  transition={{ duration: 0.3, ease: EASE_OUT }}
+                >
+                  <ScanButton
+                    isScanning={isScanning}
+                    isComplete={isScanComplete}
+                    onClick={handleScan}
+                  />
+
+                  {/* Launch button — same visual style as ScanButton.
+                       Only enabled when scan is idle and launch is idle. */}
+                  <Motion.button
+                    type="button"
+                    className="relative w-[206px] h-[36px] cursor-pointer select-none"
+                    onClick={handleLaunch}
+                    whileHover={launchPhase === 'idle' && scanPhase === 'idle' ? { scale: 1.03 } : {}}
+                    whileTap={launchPhase === 'idle' && scanPhase === 'idle' ? { scale: 0.97 } : {}}
+                    disabled={launchPhase !== 'idle' || scanPhase !== 'idle'}
+                    aria-label="Launch rocket"
+                  >
+                    <img
+                      src={btnScanOutlineSvg}
+                      alt=""
+                      className="absolute inset-0 w-full h-full"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span
+                        className="text-[12px] font-medium uppercase"
+                        style={{ fontFamily: FONT_BDO, color: '#EB9E45' }}
+                      >
+                        LAUNCH
+                      </span>
+                    </div>
+                  </Motion.button>
+                </Motion.div>
               </Motion.div>
             )}
           </AnimatePresence>
