@@ -390,20 +390,12 @@ function FuelSystemView({ fuelLevel, isFilling, isComplete, onAddFuel }) {
             </p>
           ))}
         </div>
-        {/* Right column values — layout fix: anchored from RIGHT edge to prevent
-             overflow clipping. Flex row [line][text] keeps text BESIDE the line.
-             right-[52px] = 40px ruler + 12px gap from viewport right edge. */}
+        {/* Right column values — right-aligned, no decorative line */}
         <div className="absolute right-[52px] top-0 flex flex-col gap-[16px] opacity-70">
           {FUEL_TELEMETRY_RIGHT.map((val, i) => (
-            <div key={i} className="flex items-center gap-[8px]">
-              <div className="w-[16px] h-[1px] shrink-0" style={{ backgroundColor: 'rgba(39,195,204,0.4)' }} />
-              <span
-                className="text-[15px] font-medium uppercase whitespace-nowrap"
-                style={{ fontFamily: FONT_OXANIUM, color: CYAN }}
-              >
-                {val}
-              </span>
-            </div>
+            <p key={i} className="text-[15px] font-medium uppercase whitespace-nowrap text-right" style={{ fontFamily: FONT_OXANIUM, color: CYAN }}>
+              {val}
+            </p>
           ))}
         </div>
 
@@ -642,7 +634,6 @@ function MenuItem({ item, isActive, isDisabled, onClick, index }) {
       className="relative w-full h-[56px] flex items-center justify-between px-[24px] py-[10px] select-none shrink-0"
       style={{
         cursor: isDisabled ? 'default' : 'pointer',
-        opacity: isDisabled ? 0.4 : 1,
         pointerEvents: isDisabled ? 'none' : 'auto',
       }}
       onClick={() => !isDisabled && onClick(index)}
@@ -659,7 +650,7 @@ function MenuItem({ item, isActive, isDisabled, onClick, index }) {
         src={isActive ? menuActiveBgSvg : menuInactiveBgSvg}
         alt=""
         className="absolute right-0 top-1/2 -translate-y-1/2 h-[56px] w-[440px]"
-        style={{ maxWidth: '100%' }}
+        style={{ maxWidth: '100%', opacity: isDisabled ? 0.3 : 1 }}
       />
 
       {/* ── Hover shine effect ──
@@ -702,13 +693,13 @@ function MenuItem({ item, isActive, isDisabled, onClick, index }) {
       >
         <span
           className="text-[22px] font-medium leading-[1.2]"
-          style={{ color: isActive ? 'black' : CYAN }}
+          style={{ color: isActive ? 'black' : isDisabled ? 'rgba(39,195,204,0.3)' : CYAN }}
         >
           {item.code}
         </span>
         <Motion.span
           className="text-[22px] font-medium leading-[1.2]"
-          style={{ color: isActive ? 'black' : WHITE }}
+          style={{ color: isActive ? 'black' : isDisabled ? 'rgba(255,255,255,0.25)' : WHITE }}
           animate={{
             textShadow: isHovered && !isActive
               ? '0 0 10px rgba(39,195,204,0.35)'
@@ -721,7 +712,7 @@ function MenuItem({ item, isActive, isDisabled, onClick, index }) {
       </div>
 
       {/* Arrow icon — Figma: 24×24 */}
-      <div className="relative w-[24px] h-[24px] shrink-0">
+      <div className="relative w-[24px] h-[24px] shrink-0" style={{ opacity: isDisabled ? 0.3 : 1 }}>
         <img
           src={isActive ? menuArrowActiveSvg : menuArrowInactiveSvg}
           alt=""
@@ -1114,8 +1105,9 @@ function ShuttleViewport({
       <div className="absolute left-1/2 -translate-x-1/2 top-0 w-[507px] h-[95px]">
         <img src={topArcSvg} alt="" className="w-full h-full" />
       </div>
-      {/* Top arc decoration — inner (60% opacity) */}
-      <div className="absolute left-1/2 -translate-x-1/2 top-[5px] w-[507px] h-[72px] opacity-60">
+      {/* Top arc decoration — inner with ticks (60% opacity)
+           SVG path and ticks extracted directly from Figma MCP */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-[5px] w-[507px] h-[80px] opacity-60">
         <img src={topArcInnerSvg} alt="" className="w-full h-full" />
       </div>
 

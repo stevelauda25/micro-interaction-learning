@@ -9,7 +9,24 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "mcp__figma__get_design_context",
-      "Bash(node -e ':*)"
+      "Bash(node -e ':*)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); text=data[0]['text'] if isinstance\\(data,list\\) else data['text']; [print\\(line\\) for i,line in enumerate\\(text.split\\('\\\\n'\\)\\) if any\\(k in line.lower\\(\\) for k in ['vector','stroke','path','8364','27c3cc','svg']\\)]\")",
+      "mcp__figma__get_metadata",
+      "Bash(curl -L -o \"d:/Blissful/Design Engineering/micro-interaction-learning/src/assets/scan-shuttle/top-arc-outer-figma.svg\" \"https://www.figma.com/api/mcp/asset/f299d2e9-251d-4ded-95a0-1626d220f087\")",
+      "Bash(curl -L -o \"d:/Blissful/Design Engineering/micro-interaction-learning/src/assets/scan-shuttle/top-arc-inner-figma.png\" \"https://www.figma.com/api/mcp/asset/185b3162-5308-44a0-8ed9-56c3b1a0638a\")",
+      "Bash(curl -L -o \"d:/Blissful/Design Engineering/micro-interaction-learning/src/assets/scan-shuttle/top-arc-inner-figma-v2.png\" \"https://www.figma.com/api/mcp/asset/dfc45bf0-633f-4e7a-b549-b41de48f9162\")",
+      "Bash(curl -sL -o /tmp/fill-bar.png \"https://www.figma.com/api/mcp/asset/0b26f8b3-d25e-4f08-879b-a29839fe01e9\")",
+      "Read(//tmp/**)",
+      "Bash(curl -sL -o /tmp/badge.svg \"https://www.figma.com/api/mcp/asset/6d97daa4-2444-4118-833a-12698665115d\")",
+      "Bash(curl -sL -o /tmp/track-bg.svg \"https://www.figma.com/api/mcp/asset/f3bd0ae8-1051-4aee-9a2f-28ec2a49262b\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/f72a01a8-8581-489a-bf6c-5178b890e79a\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/77d81ce9-aa83-432f-bb6a-050b164b5baa\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/5de8b4cd-e4bf-4bf8-b97c-e04e1dda756a\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/1434547a-9cdd-41d7-8f87-449c71126394\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/da8ce763-02be-47a7-89a8-ef24ea29c587\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/b4d400a5-1c13-4af8-b51f-168b367e6f07\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/57bdc8fa-9ab5-4ca4-8d26-f23ca38696d6\")",
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/ac0b02f4-76c8-404d-acd7-3b6a5525d613\")"
     ],
     "additionalDirectories": [
       "d:\\Blissful\\Design Engineering\\micro-interaction-learning\\src\\assets"

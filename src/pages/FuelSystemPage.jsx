@@ -41,10 +41,10 @@ const MENU_ITEMS = [
 
 // ─── Telemetry labels (Figma nodes 1699:51875 / 1699:51885) ─────────────────
 const TELEMETRY_LEFT = [
-  'FUEL CONSUMPTION RATE',
-  'ENGINE FEED STATUS',
-  'FLOW VELOCITY',
-  'BURN MODE',
+  'FUEL CONSUMPTION',
+  'ENGINE STATUS',
+  'FLOW ',
+  'BURN RT.',
 ]
 const TELEMETRY_RIGHT = [
   '12.4 L/MIN',
