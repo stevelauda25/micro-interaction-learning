@@ -1134,24 +1134,19 @@ function NozzleFlame({ launchPhase, side }) {
       ? [0.6, 0.85, 0.65]      // anticipation: intensifying
       : [0.85, 1, 0.9]         // ignition/launch: full intensity
 
+  // Launch animation: ONLY scaleY (vertical stretch downward).
+  // NO scaleX animation — width is FIXED at idle value for all states.
+  // Flame stretches from top center anchor, extending the bottom edge only.
   const scaleYVal = isThrusting
-    ? [1, 1.3, 1.05, 1.25]     // launch: large dynamic pulse
+    ? [1.0, 1.4, 1.1, 1.35]    // launch: tall stretching pulse
     : isIgnition
-      ? [0.8, 1.1, 0.85]       // ignition: strong
+      ? [0.5, 0.8, 0.55]       // ignition: height ramps up
       : isBuilding
-        ? [0.4, 0.55, 0.45]    // anticipation: growing
-        : [0.4, 0.5, 0.45]     // idle: substantial — engine clearly on
-
-  const scaleXVal = isThrusting
-    ? [0.9, 1.05, 0.92]
-    : isIgnition
-      ? [0.75, 0.9, 0.78]
-      : isBuilding
-        ? [0.5, 0.65, 0.55]
-        : [0.93, 1.0, 0.96]    // idle: always wider than 38px nozzle (44*0.93=41px min)
+        ? [0.4, 0.5, 0.45]     // anticipation: holds idle height
+        : [0.4, 0.5, 0.45]     // idle: base state (DO NOT CHANGE)
 
   // Idle breathes slowly (2.5s), launch phases pulse faster
-  const duration = isThrusting ? 0.3 : isIgnition ? 0.45 : isBuilding ? 0.6 : 2.5
+  const duration = isThrusting ? 0.35 : isIgnition ? 0.5 : isBuilding ? 0.7 : 2.5
 
   return (
     <Motion.div
@@ -1160,14 +1155,20 @@ function NozzleFlame({ launchPhase, side }) {
       style={{
         width: 44,
         height: 60,
+        // Fixed transformOrigin: top center — scaleY stretches DOWNWARD only.
         transformOrigin: 'top center',
+        // Fixed scaleX at idle value — width NEVER changes between states.
+        // This is in style (not animate) so it cannot be animated.
+        transform: 'scaleX(0.96)',
       }}
-      // Initial matches idle minimum — always wider than nozzle, zero gap.
-      initial={{ opacity: 0.55, scaleY: 0.4, scaleX: 0.93 }}
+      // NO scaleX in initial or animate — width is FIXED via style.
+      initial={{ opacity: 0.55, scaleY: 0.4 }}
       animate={{
         opacity: opacityVal,
         scaleY: scaleYVal,
-        scaleX: scaleXVal,
+        // NO scaleX — width never changes between idle and launch.
+        // NO x, y, translate — position never changes.
+        // ONLY scaleY → flame stretches downward from fixed top anchor.
       }}
       transition={{
         duration,
@@ -1175,6 +1176,12 @@ function NozzleFlame({ launchPhase, side }) {
         repeat: Infinity,
         repeatType: 'mirror',
         ease: 'easeInOut',
+        scaleY: {
+          duration: isIdle ? 2.5 : duration * 1.5,
+          repeat: Infinity,
+          repeatType: 'mirror',
+          ease: [0.4, 0, 0.2, 1],
+        },
       }}
     >
       <svg viewBox="0 0 44 60" fill="none" className="w-full h-full">
@@ -1253,11 +1260,10 @@ function ExhaustTrail({ launchPhase, side }) {
               }}
               initial={{ opacity: 0, scaleY: 0.2 }}
               animate={{
+                // ONLY scaleY + opacity — no y, no x, no skewX.
+                // Trail stretches downward from its top anchor, same as flame.
+                // No position movement = no visual jumping.
                 scaleY: isThrusting ? [1, 1.4, 1.1, 1.35] : [0.6, 0.9, 0.65],
-                skewX: isThrusting
-                  ? [0, 3, -3, 2, -2, 0]
-                  : [0, 1.5, -1.5, 0],
-                y: isThrusting ? [0, 20, 5, 18] : [0, 10, 2],
                 opacity: layer.opacity,
               }}
               exit={{ opacity: 0, scaleY: 0, transition: { duration: 0.3 } }}
@@ -1313,14 +1319,16 @@ function RocketFlame({ launchPhase }) {
     <div
       className="absolute pointer-events-none"
       style={{
-        // Flame sits below nozzle — lowered 6px for better grounding.
-        bottom: -56,
+        // Flame top sits just below the rocket container bottom.
+        // -10px pushes it slightly lower so it starts at the nozzle exit,
+        // not inside the nozzle cone.
+        bottom: -55,
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',
         // Nozzle center-to-center = 67px (SVG: left x=128, right x=195).
         // Flame width = 38px. Gap = 67 - 38 = 29px.
-        gap: 29,
+        gap: 27,
         zIndex: 20,
       }}
     >
