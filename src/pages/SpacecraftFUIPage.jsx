@@ -1148,7 +1148,7 @@ function NozzleFlame({ launchPhase, side }) {
       ? [0.75, 0.9, 0.78]
       : isBuilding
         ? [0.5, 0.65, 0.55]
-        : [0.7, 0.8, 0.75]     // idle: wide, stable presence
+        : [0.93, 1.0, 0.96]    // idle: always wider than 38px nozzle (44*0.93=41px min)
 
   // Idle breathes slowly (2.5s), launch phases pulse faster
   const duration = isThrusting ? 0.3 : isIgnition ? 0.45 : isBuilding ? 0.6 : 2.5
@@ -1162,8 +1162,8 @@ function NozzleFlame({ launchPhase, side }) {
         height: 60,
         transformOrigin: 'top center',
       }}
-      // Initial matches idle resting state — engine reads as ON from first frame.
-      initial={{ opacity: 0.55, scaleY: 0.4, scaleX: 0.7 }}
+      // Initial matches idle minimum — always wider than nozzle, zero gap.
+      initial={{ opacity: 0.55, scaleY: 0.4, scaleX: 0.93 }}
       animate={{
         opacity: opacityVal,
         scaleY: scaleYVal,
@@ -1313,12 +1313,14 @@ function RocketFlame({ launchPhase }) {
     <div
       className="absolute pointer-events-none"
       style={{
-        // Flame pushed further down for deeper separation from nozzle.
-        bottom: -50,
+        // Flame sits below nozzle — lowered 6px for better grounding.
+        bottom: -56,
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',
-        gap: 12,
+        // Nozzle center-to-center = 67px (SVG: left x=128, right x=195).
+        // Flame width = 38px. Gap = 67 - 38 = 29px.
+        gap: 29,
         zIndex: 20,
       }}
     >
