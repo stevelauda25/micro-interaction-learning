@@ -374,23 +374,23 @@ function ModeSwitch({ label, value, onChange }) {
         {label}
       </p>
 
-      {/* Mode bar — chamfered bottom-left (CLIP_MODE_BAR: 14px cut).
-           Glow pulse on mode change: border brightens briefly. */}
+      {/* Mode bar — chamfered bottom-right (CLIP_MODE_BAR: 16×14px cut).
+           NO background fill — transparent. Border pulses on mode change. */}
       <ChamferShape
         clipPath={CLIP_MODE_BAR}
-        fill="rgba(39,195,204,0.03)"
+        fill="transparent"
         borderColor={glowPulse ? CYAN : CYAN_BORDER}
         style={{ height: 40, transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)' }}
       >
         <div className="flex items-center justify-between w-full h-full" style={{ padding: '10px 24px' }}>
-          {/* Left arrow — hover: scale + glow, click: scale 0.9 */}
+          {/* Left arrow — nudges left on tap, scales on hover */}
           <Motion.button
             type="button"
             className="relative z-10 flex items-center justify-center cursor-pointer"
             style={{ width: 24, height: 24 }}
             onClick={handlePrev}
             whileHover={{ scale: 1.15, filter: `drop-shadow(0 0 6px ${CYAN_GLOW})` }}
-            whileTap={{ scale: 0.85 }}
+            whileTap={{ scale: 0.85, x: -4 }}
             aria-label="Previous mode"
           >
             <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
@@ -398,27 +398,33 @@ function ModeSwitch({ label, value, onChange }) {
             </svg>
           </Motion.button>
 
-          <div className="flex-1 flex flex-col items-center justify-center gap-[4px] overflow-hidden">
-            {/* Text — directional slide animation.
-                 Exit: fades out + slides in direction of change.
-                 Enter: slides in from opposite side. */}
+          <Motion.div
+            className="flex-1 flex flex-col items-center justify-center gap-[4px] overflow-hidden"
+            // Directional scale: container briefly squishes in the click direction
+            // then bounces back. transformOrigin shifts to the side the arrow was clicked.
+            animate={{ scale: 1 }}
+            style={{
+              transformOrigin: direction === -1 ? 'left center' : direction === 1 ? 'right center' : 'center',
+            }}
+            key={`dir_${value}`}
+          >
+            {/* Label slide — directional enter/exit with scale pop */}
             <AnimatePresence mode="wait" initial={false}>
               <Motion.span
                 key={value}
                 className="text-[18px] font-medium capitalize"
                 style={{ fontFamily: FONT_BDO, color: WHITE, lineHeight: '1.2' }}
-                initial={{ opacity: 0, x: direction * 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: direction * -20 }}
-                transition={{ duration: 0.25, ease: EASE_OUT }}
+                initial={{ opacity: 0, x: direction * 30, scale: 0.92 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: direction * -30, scale: 0.92 }}
+                transition={{ duration: 0.3, ease: EASE_OUT }}
               >
                 {value}
               </Motion.span>
             </AnimatePresence>
 
-            {/* Indicator dots — w-[40px] h-[2px] each.
-                 Active dot: full opacity with scaleX animation (0 → 1).
-                 Inactive dot: 10% opacity. */}
+            {/* Indicator underline — active grows from scaleX 0 → 1 (full sweep).
+                 Inactive shrinks to 0.3 and dims to 8% — more contrast than before. */}
             <div className="flex gap-[4px]">
               {INJECTION_MODES.map((m) => (
                 <Motion.div
@@ -427,27 +433,26 @@ function ModeSwitch({ label, value, onChange }) {
                     width: 40,
                     height: 2,
                     backgroundColor: CYAN,
-                    // scaleX animation: active underline grows from center
                     transformOrigin: 'center',
                   }}
                   animate={{
-                    opacity: m === value ? 1 : 0.1,
-                    scaleX: m === value ? 1 : 0.6,
+                    opacity: m === value ? 1 : 0.08,
+                    scaleX: m === value ? 1 : 0.3,
                   }}
-                  transition={{ duration: 0.3, ease: EASE_OUT }}
+                  transition={{ duration: 0.35, ease: EASE_OUT }}
                 />
               ))}
             </div>
-          </div>
+          </Motion.div>
 
-          {/* Right arrow */}
+          {/* Right arrow — nudges right on tap for directional feedback */}
           <Motion.button
             type="button"
             className="relative z-10 flex items-center justify-center cursor-pointer"
             style={{ width: 24, height: 24 }}
             onClick={handleNext}
             whileHover={{ scale: 1.15, filter: `drop-shadow(0 0 6px ${CYAN_GLOW})` }}
-            whileTap={{ scale: 0.85 }}
+            whileTap={{ scale: 0.85, x: 4 }}
             aria-label="Next mode"
           >
             <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
@@ -484,89 +489,101 @@ function ToggleSwitch({ label, value, onChange }) {
       </p>
 
       <div className="flex gap-[12px] w-full">
-        {/* ON button — CLIP_TOGGLE_ON: bottom-left chamfer, 14px cut.
-             Active: cyan fill + scaleX expansion + glow.
-             Inactive: dark bg + border outline + slight fade. */}
+        {/* ON button — CLIP_TOGGLE_ON: bottom-left chamfer, 17×14px cut.
+             Active: darker cyan fill (#0E4F52) for readable white text.
+             Inactive: dark bg + border + hover brightens for discoverability.
+             Click: scale pulse 1→1.03→1 for satisfying press feedback. */}
         <Motion.button
           type="button"
           className="flex-1 relative cursor-pointer"
           style={{ height: 40, fontFamily: FONT_BDO }}
           onClick={() => onChange(true)}
-          // Active side expands slightly for premium feel
           animate={{
-            scaleX: value ? 1.02 : 1,
-            opacity: value ? 1 : 0.85,
+            scale: value ? [1, 1.03, 1] : 1,
           }}
-          transition={{ duration: 0.3, ease: EASE_OUT }}
-          whileHover={{ filter: `brightness(1.1)` }}
-          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.25, ease: EASE_OUT }}
+          whileHover={{
+            filter: value
+              ? `drop-shadow(0 0 8px ${CYAN_GLOW})`
+              : 'brightness(1.2)',
+          }}
+          whileTap={{ scale: 0.96 }}
         >
-          {/* Border layer — only visible when inactive */}
-          {!value && (
-            <div
-              className="absolute pointer-events-none"
-              style={{ inset: -1, clipPath: CLIP_TOGGLE_ON, backgroundColor: CYAN_BORDER }}
-            />
-          )}
-          {/* Fill layer — cyan when active, dark when inactive */}
+          {/* Border layer — always visible, brighter when active */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              inset: -1,
+              clipPath: CLIP_TOGGLE_ON,
+              backgroundColor: value ? CYAN : CYAN_BORDER,
+              transition: 'background-color 0.25s ease',
+            }}
+          />
+          {/* Fill — darker cyan when active (readable), dark when inactive */}
           <Motion.div
             className="relative w-full h-full flex items-center"
             style={{ clipPath: CLIP_TOGGLE_ON, padding: '10px 24px', justifyContent: 'center' }}
             animate={{
-              // Figma SVG: ON fill=#20B2BA, OFF fill=rgba(39,195,204,0.03)
-              backgroundColor: value ? CYAN_FILL : 'rgba(39,195,204,0.03)',
+              // Active: #0E4F52 — dark enough for white text to be readable,
+              // cyan enough to clearly read as "selected".
+              backgroundColor: value ? '#0E4F52' : 'rgba(39,195,204,0.03)',
               boxShadow: value
-                ? '0 0 20px rgba(39,195,204,0.3), inset 0 0 12px rgba(39,195,204,0.1)'
+                ? 'inset 0 1px 0 rgba(42,245,255,0.15), 0 0 16px rgba(39,195,204,0.2)'
                 : '0 0 0px transparent',
             }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
+            transition={{ duration: 0.3, ease: EASE_OUT }}
           >
             <Motion.span
               className="relative text-[18px] font-medium leading-[1.2]"
-              animate={{ color: value ? BLACK : WHITE }}
-              transition={{ duration: 0.2 }}
+              animate={{ color: value ? '#2AF5FF' : 'rgba(255,255,255,0.6)' }}
+              transition={{ duration: 0.25 }}
             >
               On
             </Motion.span>
           </Motion.div>
         </Motion.button>
 
-        {/* OFF button — CLIP_TOGGLE_OFF: bottom-right chamfer, 14px cut (mirror). */}
+        {/* OFF button — CLIP_TOGGLE_OFF: bottom-right chamfer, 17×14px cut (mirror). */}
         <Motion.button
           type="button"
           className="flex-1 relative cursor-pointer"
           style={{ height: 40, fontFamily: FONT_BDO }}
           onClick={() => onChange(false)}
           animate={{
-            scaleX: !value ? 1.02 : 1,
-            opacity: !value ? 1 : 0.85,
+            scale: !value ? [1, 1.03, 1] : 1,
           }}
-          transition={{ duration: 0.3, ease: EASE_OUT }}
-          whileHover={{ filter: `brightness(1.1)` }}
-          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.25, ease: EASE_OUT }}
+          whileHover={{
+            filter: !value
+              ? `drop-shadow(0 0 8px ${CYAN_GLOW})`
+              : 'brightness(1.2)',
+          }}
+          whileTap={{ scale: 0.96 }}
         >
-          {value && (
-            <div
-              className="absolute pointer-events-none"
-              style={{ inset: -1, clipPath: CLIP_TOGGLE_OFF, backgroundColor: CYAN_BORDER }}
-            />
-          )}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              inset: -1,
+              clipPath: CLIP_TOGGLE_OFF,
+              backgroundColor: !value ? CYAN : CYAN_BORDER,
+              transition: 'background-color 0.25s ease',
+            }}
+          />
           <Motion.div
             className="relative w-full h-full flex items-center"
             style={{ clipPath: CLIP_TOGGLE_OFF, padding: '10px 24px', justifyContent: 'center' }}
             animate={{
-              // Figma SVG: ON fill=#20B2BA, OFF fill=rgba(39,195,204,0.03)
-              backgroundColor: !value ? CYAN_FILL : 'rgba(39,195,204,0.03)',
+              backgroundColor: !value ? '#0E4F52' : 'rgba(39,195,204,0.03)',
               boxShadow: !value
-                ? '0 0 20px rgba(39,195,204,0.3), inset 0 0 12px rgba(39,195,204,0.1)'
+                ? 'inset 0 1px 0 rgba(42,245,255,0.15), 0 0 16px rgba(39,195,204,0.2)'
                 : '0 0 0px transparent',
             }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
+            transition={{ duration: 0.3, ease: EASE_OUT }}
           >
             <Motion.span
               className="relative text-[18px] font-medium leading-[1.2]"
-              animate={{ color: !value ? BLACK : WHITE }}
-              transition={{ duration: 0.2 }}
+              animate={{ color: !value ? '#2AF5FF' : 'rgba(255,255,255,0.6)' }}
+              transition={{ duration: 0.25 }}
             >
               Off
             </Motion.span>
@@ -938,11 +955,12 @@ export function SettingsModal({ isOpen, onClose }) {
               {/* ═══ HEADER — p-[20px], justify-between ═══ */}
               <div className="flex items-center justify-between shrink-0 w-full" style={{ padding: 20 }}>
 
-                {/* Close button — CLIP_CLOSE: all 4 corners chamfered, 6px cut */}
+                {/* Close button — CLIP_CLOSE: all 4 corners chamfered, 6px cut
+                     Fill: #001B1C, Border: #27C3CC, Icon: #27C3CC */}
                 <ChamferShape
                   clipPath={CLIP_CLOSE}
-                  fill="transparent"
-                  borderColor={CYAN_BORDER}
+                  fill="#001B1C"
+                  borderColor="#27C3CC"
                   className="shrink-0"
                   style={{ width: 40, height: 40 }}
                 >

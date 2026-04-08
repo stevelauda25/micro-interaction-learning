@@ -1054,27 +1054,20 @@ function TelemetryLabels({ scanPhase }) {
         ))}
       </div>
 
-      {/* Right column values — layout fix: anchored from RIGHT edge to prevent
-           overflow clipping. Flex row [line][text] ensures text sits BESIDE the
-           line, never overlapping. right-[52px] keeps content inside the viewport
-           boundary (40px ruler + 12px gap from right edge). */}
+      {/* Right column values — right-aligned, no decorative line.
+           Mirrors left column structure but text-right aligned. */}
       <div className="absolute right-[52px] top-[149px] flex flex-col gap-[12px] opacity-70">
         {TELEMETRY_RIGHT.map((val, i) => (
-          <Motion.div
+          <Motion.p
             key={i}
-            className="flex items-center gap-[8px]"
+            className="text-[15px] font-medium uppercase whitespace-nowrap text-right"
+            style={{ fontFamily: FONT_OXANIUM, color: '#27c3cc' }}
             initial={{ opacity: 0, x: 8 }}
             animate={{ opacity: isRevealed ? 1 : 0, x: isRevealed ? 0 : 8 }}
             transition={{ duration: 0.3, delay: scanPhase === 'complete' ? 0.05 * i : 0 }}
           >
-            <div className="w-[16px] h-[1px] shrink-0" style={{ backgroundColor: 'rgba(39,195,204,0.4)' }} />
-            <span
-              className="text-[15px] font-medium uppercase whitespace-nowrap"
-              style={{ fontFamily: FONT_OXANIUM, color: '#27c3cc' }}
-            >
-              {val}
-            </span>
-          </Motion.div>
+            {val}
+          </Motion.p>
         ))}
       </div>
     </>
@@ -1117,95 +1110,61 @@ const NOZZLE_OFFSET_X = 33.5
 // - idle: small, subtle pilot flame — gentle flicker, low opacity, barely visible
 // - launching (anticipation/ignition/launch): progressively bigger and more dynamic
 function NozzleFlame({ launchPhase, side }) {
-  const isIdle = launchPhase === 'idle' || launchPhase === 'fadeUI' || launchPhase === 'done'
   const isThrusting = launchPhase === 'launch'
-  const isIgnition = launchPhase === 'ignition'
-  const isBuilding = launchPhase === 'anticipation'
 
-  const gradId = `nozzleGrad_${side}`
-  const coreId = `nozzleCore_${side}`
-  const delayOffset = side === 'right' ? 0.08 : 0
-
-  // Idle flame: engine is ON — stable, clearly visible, but calmer than launch.
-  // Size is close to anticipation baseline so the transition feels natural.
-  const opacityVal = isIdle
-    ? [0.55, 0.7, 0.6]         // idle: bright enough to read as "engine running"
-    : isBuilding
-      ? [0.6, 0.85, 0.65]      // anticipation: intensifying
-      : [0.85, 1, 0.9]         // ignition/launch: full intensity
-
-  // Launch animation: ONLY scaleY (vertical stretch downward).
-  // NO scaleX animation — width is FIXED at idle value for all states.
-  // Flame stretches from top center anchor, extending the bottom edge only.
-  const scaleYVal = isThrusting
-    ? [1.0, 1.4, 1.1, 1.35]    // launch: tall stretching pulse
-    : isIgnition
-      ? [0.5, 0.8, 0.55]       // ignition: height ramps up
-      : isBuilding
-        ? [0.4, 0.5, 0.45]     // anticipation: holds idle height
-        : [0.4, 0.5, 0.45]     // idle: base state (DO NOT CHANGE)
-
-  // Idle breathes slowly (2.5s), launch phases pulse faster
-  const duration = isThrusting ? 0.35 : isIgnition ? 0.5 : isBuilding ? 0.7 : 2.5
+  // ✅ FIX: base idle size = 1
+  const BASE_SCALE = 1.3
 
   return (
     <Motion.div
-      key={`nozzle_flame_${side}`}
       className={`${side}-nozzle pointer-events-none`}
       style={{
         width: 44,
         height: 60,
-        // Fixed transformOrigin: top center — scaleY stretches DOWNWARD only.
+
+        // anchor tetap
         transformOrigin: 'top center',
-        // Fixed scaleX at idle value — width NEVER changes between states.
-        // This is in style (not animate) so it cannot be animated.
+
+        // width tetap (jangan diubah)
         transform: 'scaleX(0.96)',
       }}
-      // NO scaleX in initial or animate — width is FIXED via style.
-      initial={{ opacity: 0.55, scaleY: 0.4 }}
+      initial={{
+        opacity: 0.6,
+        scaleY: BASE_SCALE,
+      }}
       animate={{
-        opacity: opacityVal,
-        scaleY: scaleYVal,
-        // NO scaleX — width never changes between idle and launch.
-        // NO x, y, translate — position never changes.
-        // ONLY scaleY → flame stretches downward from fixed top anchor.
+        opacity: isThrusting ? 1 : 1.6,
+
+        // ✅ FIX: launch jadi 2.3 (lebih panjang ke bawah)
+        scaleY: isThrusting ? 2.3 : BASE_SCALE,
       }}
       transition={{
-        duration,
-        delay: delayOffset,
-        repeat: Infinity,
-        repeatType: 'mirror',
-        ease: 'easeInOut',
-        scaleY: {
-          duration: isIdle ? 2.5 : duration * 1.5,
-          repeat: Infinity,
-          repeatType: 'mirror',
-          ease: [0.4, 0, 0.2, 1],
-        },
+        duration: 3,
+        ease: [0.25, 0.1, 0.25, 1],
       }}
     >
-      <svg viewBox="0 0 44 60" fill="none" className="w-full h-full">
+      <svg viewBox="0 0 44 60" className="w-full h-full">
         <defs>
-          <radialGradient id={gradId} cx="50%" cy="25%" r="55%">
+          <radialGradient id={`grad_${side}`} cx="50%" cy="25%" r="55%">
             <stop offset="0%" stopColor="#FFE066" stopOpacity="0.95" />
             <stop offset="35%" stopColor="#FFB84D" stopOpacity="0.8" />
             <stop offset="70%" stopColor="#FF6B1A" stopOpacity="0.5" />
             <stop offset="100%" stopColor="#FF3300" stopOpacity="0" />
           </radialGradient>
-          <radialGradient id={coreId} cx="50%" cy="20%" r="30%">
-            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
+
+          <radialGradient id={`core_${side}`} cx="50%" cy="20%" r="30%">
+            <stop offset="0%" stopColor="#FFFFFF" />
             <stop offset="60%" stopColor="#FFE066" stopOpacity="0.7" />
             <stop offset="100%" stopColor="#FFB84D" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <ellipse cx="22" cy="18" rx="20" ry="28" fill={`url(#${gradId})`} />
-        <ellipse cx="22" cy="14" rx="9" ry="16" fill={`url(#${coreId})`} />
+
+        <ellipse cx="22" cy="18" rx="20" ry="28" fill={`url(#grad_${side})`} />
+        <ellipse cx="22" cy="14" rx="9" ry="16" fill={`url(#core_${side})`} />
       </svg>
     </Motion.div>
   )
 }
-
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENT: ExhaustTrail — Duolingo-style wavy trailing exhaust
 //
@@ -1228,81 +1187,33 @@ function NozzleFlame({ launchPhase, side }) {
 // Each trail is a stack of 3 blurred layers with staggered animation.
 // ═══════════════════════════════════════════════════════════════════════════════
 function ExhaustTrail({ launchPhase, side }) {
-  const isVisible = launchPhase === 'ignition' || launchPhase === 'launch'
   const isThrusting = launchPhase === 'launch'
 
-  const layers = [
-    { width: 36, height: 90, delay: 0, opacity: [0.6, 0.85, 0.55], blur: 4 },
-    { width: 50, height: 130, delay: 0.12, opacity: [0.35, 0.55, 0.3], blur: 8 },
-    { width: 64, height: 170, delay: 0.25, opacity: [0.15, 0.3, 0.12], blur: 14 },
-  ]
-
   return (
-    <AnimatePresence>
-      {isVisible && (
-        <div
-          key={`trail_container_${side}`}
-          className={`${side}-nozzle-trail pointer-events-none relative`}
-          style={{ width: 64, marginTop: 4 }}
-        >
-          {layers.map((layer, i) => (
-            <Motion.div
-              key={`trail_${side}_${i}`}
-              className="absolute pointer-events-none"
-              style={{
-                width: layer.width,
-                height: layer.height,
-                left: '50%',
-                top: i * 10,
-                transform: `translateX(-50%)`,
-                transformOrigin: 'top center',
-                filter: `blur(${layer.blur}px)`,
-              }}
-              initial={{ opacity: 0, scaleY: 0.2 }}
-              animate={{
-                // ONLY scaleY + opacity — no y, no x, no skewX.
-                // Trail stretches downward from its top anchor, same as flame.
-                // No position movement = no visual jumping.
-                scaleY: isThrusting ? [1, 1.4, 1.1, 1.35] : [0.6, 0.9, 0.65],
-                opacity: layer.opacity,
-              }}
-              exit={{ opacity: 0, scaleY: 0, transition: { duration: 0.3 } }}
-              transition={{
-                duration: isThrusting ? 1.2 : 1.5,
-                delay: layer.delay,
-                repeat: Infinity,
-                repeatType: 'mirror',
-                ease: 'easeInOut',
-              }}
-            >
-              <svg
-                viewBox={`0 0 ${layer.width} ${layer.height}`}
-                fill="none"
-                className="w-full h-full"
-              >
-                <defs>
-                  <radialGradient id={`trail_${side}_${i}`} cx="50%" cy="20%" r="60%">
-                    <stop offset="0%" stopColor="#FF8C42" stopOpacity="0.7" />
-                    <stop offset="50%" stopColor="#FF6B1A" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#CC3300" stopOpacity="0" />
-                  </radialGradient>
-                </defs>
-                <ellipse
-                  cx={layer.width / 2}
-                  cy={layer.height * 0.35}
-                  rx={layer.width / 2 - 2}
-                  ry={layer.height * 0.45}
-                  fill={`url(#trail_${side}_${i})`}
-                />
-              </svg>
-            </Motion.div>
-          ))}
-        </div>
-      )}
-    </AnimatePresence>
+    <div className={`${side}-nozzle-trail relative`} style={{ width: 64, marginTop: 6 }}>
+      <Motion.div
+        style={{
+          width: 50,
+          height: 140,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          transformOrigin: 'top center',
+          filter: 'blur(10px)',
+          background: 'linear-gradient(to bottom, rgba(255,140,0,0.6), transparent)',
+        }}
+        initial={{ opacity: 0 }}
+        animate={{
+          opacity: isThrusting ? 0.8 : 0,
+          scaleY: isThrusting ? 1.4 : 0.6,
+        }}
+        transition={{
+          duration: 0.8,
+          ease: [0.25, 0.1, 0.25, 1],
+        }}
+      />
+    </div>
   )
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENT: RocketFlame — dual flames placed side-by-side using flex layout
@@ -1322,13 +1233,13 @@ function RocketFlame({ launchPhase }) {
         // Flame top sits just below the rocket container bottom.
         // -10px pushes it slightly lower so it starts at the nozzle exit,
         // not inside the nozzle cone.
-        bottom: -55,
+        bottom: -200,
         left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex',
         // Nozzle center-to-center = 67px (SVG: left x=128, right x=195).
         // Flame width = 38px. Gap = 67 - 38 = 29px.
-        gap: 27,
+        gap: 3,
         zIndex: 20,
       }}
     >
@@ -1396,7 +1307,7 @@ function ShuttleViewport({
       <Motion.div
         animate={{
           opacity: isLaunchActive ? 0 : 1,
-          y: isLaunchActive ? 10 : 0,
+          y: isLaunchActive ? 4 : 0,
         }}
         transition={{ duration: 0.8, ease: EASE_OUT }}
       >
