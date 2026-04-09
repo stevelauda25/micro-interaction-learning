@@ -6,6 +6,7 @@ import { TimeCommitmentPage } from './pages/TimeCommitmentPage'
 import { ShortEscapePage }    from './pages/ShortEscapePage'
 import { SystemControlPanelPage } from './pages/SystemControlPanelPage'
 import { SpacecraftFUIPage } from './pages/SpacecraftFUIPage'
+import { TaskListPage } from './pages/TaskListPage'
 
 const router = createBrowserRouter([
   { path: '/',                    element: <IndexPage /> },
@@ -14,6 +15,7 @@ const router = createBrowserRouter([
   { path: '/short-escape',       element: <ShortEscapePage /> },
   { path: '/system-control',     element: <SystemControlPanelPage /> },
   { path: '/spacecraft-fui',     element: <SpacecraftFUIPage /> },
+  { path: '/task-list',          element: <TaskListPage /> },
 ])
 
 export default function App() {

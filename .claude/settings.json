@@ -26,7 +26,13 @@
       "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/da8ce763-02be-47a7-89a8-ef24ea29c587\")",
       "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/b4d400a5-1c13-4af8-b51f-168b367e6f07\")",
       "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/57bdc8fa-9ab5-4ca4-8d26-f23ca38696d6\")",
-      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/ac0b02f4-76c8-404d-acd7-3b6a5525d613\")"
+      "Bash(curl -sL \"https://www.figma.com/api/mcp/asset/ac0b02f4-76c8-404d-acd7-3b6a5525d613\")",
+      "Bash(npm list:*)",
+      "Bash(npx cssstudio:*)",
+      "mcp__figma__whoami",
+      "Bash(npm uninstall:*)",
+      "Bash(rm .mcp.json)",
+      "Bash(rm -rf .claude/skills/studio)"
     ],
     "additionalDirectories": [
       "d:\\Blissful\\Design Engineering\\micro-interaction-learning\\src\\assets"

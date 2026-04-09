@@ -32,6 +32,12 @@ const PAGES = [
     description: 'Cinematic spacecraft interface with 6-phase scan animation, scan line sweep, brightness reveal, and data feedback.',
     status: 'done',
   },
+  {
+    path: '/task-list',
+    title: 'Add Task Morph',
+    description: 'Pill button physically morphs into a textarea — one shell tweens width, height, radius, and shadow as a single continuous element.',
+    status: 'done',
+  },
 ]
 
 const STATUS_STYLES = {
