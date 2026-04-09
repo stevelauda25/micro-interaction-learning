@@ -99,9 +99,12 @@ export function AddTaskMorph({ onModeChange }) {
 
   // Halo + hot core, layered. Order matters — the hot core paints last
   // so it sits above the halo and pops where the cursor actually is.
+  // Opacities are kept deliberately low — the effect should read as a
+  // gentle bloom that confirms hover, not a spotlight that competes with
+  // the button's own gradient.
   const glowBackground = useMotionTemplate`
-    radial-gradient(${glowCoreSize}px circle at ${glowX}px ${glowY}px, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 65%),
-    radial-gradient(${glowSize}px circle at ${glowX}px ${glowY}px, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.08) 38%, rgba(255,255,255,0) 72%)
+    radial-gradient(${glowCoreSize}px circle at ${glowX}px ${glowY}px, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 70%),
+    radial-gradient(${glowSize}px circle at ${glowX}px ${glowY}px, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 42%, rgba(255,255,255,0) 75%)
   `
 
   // Sync glow coords with mouse, in element-local space.
@@ -589,7 +592,7 @@ export function AddTaskMorph({ onModeChange }) {
             // translate3d (instead of translateX) forces a sub-pixel
             // snap on the GPU layer, eliminating any half-pixel drift
             // during the morph.
-            left: '50%',
+            left: 200,
             transform: 'translate3d(-50%, 0, 0)',
             display: 'flex',
             alignItems: 'center',

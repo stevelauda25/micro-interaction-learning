@@ -32,7 +32,8 @@
       "mcp__figma__whoami",
       "Bash(npm uninstall:*)",
       "Bash(rm .mcp.json)",
-      "Bash(rm -rf .claude/skills/studio)"
+      "Bash(rm -rf .claude/skills/studio)",
+      "mcp__css-studio__css-studio"
     ],
     "additionalDirectories": [
       "d:\\Blissful\\Design Engineering\\micro-interaction-learning\\src\\assets"
